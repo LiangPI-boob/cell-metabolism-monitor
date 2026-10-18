@@ -1,0 +1,21 @@
+# PlatformIO 构建缓存（体积大，不要传）
+.pio/
+.pioenvs/
+.piolibdeps/
+
+# VS Code / 本机配置
+.vscode/
+*.code-workspace
+
+# 密钥与 WiFi 配置（不要传到公开仓库）
+src/wifi_credentials.h
+data/secrets.json
+
+# 编译产物
+*.bin
+*.elf
+*.map
+
+# 系统文件
+.DS_Store
+Thumbs.db

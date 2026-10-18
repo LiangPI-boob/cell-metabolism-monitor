@@ -1,0 +1,219 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1500" height="1060" viewBox="0 0 1500 1060">
+  <title>流体管路连接图 v1（培养芯片 ↔ 检测模块）</title>
+
+  <defs>
+    <marker id="arrBlue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M0,0 L10,5 L0,10 Z" fill="#2196f3"/>
+    </marker>
+    <marker id="arrOrange" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M0,0 L10,5 L0,10 Z" fill="#ff9800"/>
+    </marker>
+  </defs>
+
+  <rect x="0" y="0" width="1500" height="1060" fill="#ffffff"/>
+
+  <!-- ================= 标题 ================= -->
+  <text x="750" y="40" font-family="Microsoft YaHei, sans-serif" font-size="24" font-weight="bold" text-anchor="middle" fill="#1a1a2e">流体管路连接图 v1（培养芯片 ↔ 检测模块）</text>
+  <text x="750" y="66" font-family="Microsoft YaHei, sans-serif" font-size="13" text-anchor="middle" fill="#666">蓝色实线＝正常循环闭环　橙色虚线＝校准支路（预留）　原理/连接示意，非按比例；尺寸以实物与加工图为准</text>
+
+  <!-- ================= 培养芯片 ================= -->
+  <rect x="50" y="150" width="320" height="260" rx="12" ry="12" fill="#eaf6ee" stroke="#4caf50" stroke-width="2" stroke-dasharray="8,4"/>
+  <text x="210" y="173" font-family="Microsoft YaHei, sans-serif" font-size="12" font-weight="bold" text-anchor="middle" fill="#2e7d32">培养芯片（下腔替代件）</text>
+
+  <rect x="80" y="188" width="250" height="210" rx="8" fill="#f7fbf8" stroke="#4caf50" stroke-width="1.5"/>
+  <!-- 上腔 -->
+  <rect x="100" y="202" width="210" height="52" fill="#bcd9f2" stroke="#5b8bb8" stroke-width="1.5"/>
+  <text x="205" y="232" font-family="Microsoft YaHei, sans-serif" font-size="11" text-anchor="middle" fill="#1b3a5c">上腔（细胞 / PC 膜）</text>
+  <!-- 膜 -->
+  <rect x="100" y="256" width="210" height="6" fill="#f2a63d" stroke="#c97f1a" stroke-width="1"/>
+  <!-- 下腔 -->
+  <rect x="100" y="266" width="210" height="44" fill="#fff2c9" stroke="#d9b95c" stroke-width="1.5"/>
+  <text x="205" y="293" font-family="Microsoft YaHei, sans-serif" font-size="11" text-anchor="middle" fill="#7a5b00">下腔 ≈ 78 µL</text>
+  <!-- 下片 -->
+  <rect x="100" y="314" width="210" height="44" fill="#e4e8ee" stroke="#8a97a8" stroke-width="1.5"/>
+  <text x="205" y="341" font-family="Microsoft YaHei, sans-serif" font-size="10.5" text-anchor="middle" fill="#556677">下片（φ2 进出液孔）</text>
+
+  <!-- 出液口 -->
+  <rect x="330" y="272" width="20" height="16" fill="#4caf50" stroke="#2e7d32" stroke-width="1.5"/>
+  <text x="340" y="284" font-family="Microsoft YaHei, sans-serif" font-size="9" text-anchor="middle" fill="#ffffff" font-weight="bold">出</text>
+  <!-- 进液口 -->
+  <rect x="330" y="322" width="20" height="16" fill="#4caf50" stroke="#2e7d32" stroke-width="1.5"/>
+  <text x="340" y="334" font-family="Microsoft YaHei, sans-serif" font-size="9" text-anchor="middle" fill="#ffffff" font-weight="bold">进</text>
+
+  <text x="210" y="388" font-family="Microsoft YaHei, sans-serif" font-size="10" text-anchor="middle" fill="#e65100">★ 下腔 φ2 宝塔接头 ×2（转 3mm 软管）</text>
+
+  <!-- ================= 检测模块边界 ================= -->
+  <rect x="410" y="80" width="680" height="450" rx="12" ry="12" fill="#fffaf3" stroke="#8a97a8" stroke-width="2" stroke-dasharray="8,4"/>
+  <text x="750" y="103" font-family="Microsoft YaHei, sans-serif" font-size="12" font-weight="bold" text-anchor="middle" fill="#e65100">检测模块（独立单元，虚线内）</text>
+
+  <!-- 气泡阱 -->
+  <rect x="455" y="200" width="60" height="60" rx="8" fill="#ffffff" stroke="#8a97a8" stroke-width="1.8"/>
+  <circle cx="485" cy="220" r="5" fill="#ffffff" stroke="#8a97a8" stroke-width="1.3"/>
+  <text x="485" y="278" font-family="Microsoft YaHei, sans-serif" font-size="10" text-anchor="middle" fill="#556677">气泡阱</text>
+
+  <!-- 循环泵 -->
+  <rect x="555" y="200" width="120" height="60" rx="8" fill="#3f4a55"/>
+  <text x="615" y="226" font-family="Microsoft YaHei, sans-serif" font-size="12" font-weight="bold" text-anchor="middle" fill="#ffffff">循环泵</text>
+  <text x="615" y="244" font-family="Microsoft YaHei, sans-serif" font-size="9" text-anchor="middle" fill="#cfd8e3">5V 蠕动泵</text>
+
+  <!-- 电极流道 -->
+  <rect x="740" y="175" width="240" height="80" rx="6" fill="#bcd9f2" stroke="#5b8bb8" stroke-width="1.8"/>
+  <rect x="770" y="190" width="180" height="28" fill="#3f4a55"/>
+  <rect x="770" y="190" width="95" height="28" fill="#e9b93b"/>
+  <text x="817" y="209" font-family="Microsoft YaHei, sans-serif" font-size="9.5" text-anchor="middle" fill="#6b4d00">检测区</text>
+  <text x="860" y="243" font-family="Microsoft YaHei, sans-serif" font-size="10" text-anchor="middle" fill="#1b3a5c">电极流道</text>
+  <text x="800" y="272" font-family="Microsoft YaHei, sans-serif" font-size="9.5" text-anchor="middle" fill="#556677">→ 恒电位仪（NanoStat，WE/RE/CE）</text>
+  <line x1="800" y1="255" x2="800" y2="262" stroke="#8a97a8" stroke-width="1" stroke-dasharray="3,2"/>
+
+  <!-- 切换阀 V1 -->
+  <rect x="860" y="90" width="70" height="54" rx="6" fill="#ffffff" stroke="#ff9800" stroke-width="1.8"/>
+  <text x="895" y="112" font-family="Microsoft YaHei, sans-serif" font-size="10" text-anchor="middle" fill="#e65100" font-weight="bold">切换阀</text>
+  <text x="895" y="128" font-family="Microsoft YaHei, sans-serif" font-size="9.5" text-anchor="middle" fill="#e65100">V1（NC）</text>
+
+  <!-- 排废阀 V2 -->
+  <rect x="990" y="420" width="70" height="55" rx="6" fill="#ffffff" stroke="#ff9800" stroke-width="1.8"/>
+  <text x="1025" y="442" font-family="Microsoft YaHei, sans-serif" font-size="10" text-anchor="middle" fill="#e65100" font-weight="bold">排废阀</text>
+  <text x="1025" y="458" font-family="Microsoft YaHei, sans-serif" font-size="9.5" text-anchor="middle" fill="#e65100">V2（NC）</text>
+
+  <!-- 标准液瓶 -->
+  <rect x="1140" y="80" width="80" height="100" fill="#ffffff" stroke="#7c8b9d" stroke-width="1.8"/>
+  <rect x="1155" y="70" width="50" height="11" fill="#7c8b9d"/>
+  <text x="1180" y="135" font-family="Microsoft YaHei, sans-serif" font-size="11" text-anchor="middle" fill="#556677">标准液瓶</text>
+
+  <!-- 废液瓶 -->
+  <rect x="1140" y="430" width="80" height="100" fill="#ffffff" stroke="#7c8b9d" stroke-width="1.8"/>
+  <text x="1180" y="485" font-family="Microsoft YaHei, sans-serif" font-size="11" text-anchor="middle" fill="#556677">废液瓶</text>
+
+  <!-- ================= 管路：正常循环（蓝色实线） ================= -->
+  <!-- ① 下腔出液口 → 气泡阱 -->
+  <path d="M350,280 L380,280 L380,230 L455,230" stroke="#2196f3" stroke-width="4" fill="none" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrBlue)"/>
+  <!-- ② 气泡阱 → 循环泵 -->
+  <path d="M515,230 L555,230" stroke="#2196f3" stroke-width="4" fill="none" stroke-linecap="round" marker-end="url(#arrBlue)"/>
+  <!-- ③ 循环泵 → 电极流道 -->
+  <path d="M675,230 L710,230 L710,210 L740,210" stroke="#2196f3" stroke-width="4" fill="none" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrBlue)"/>
+  <!-- 电极出口 → 汇合点 -->
+  <path d="M980,210 L1010,210" stroke="#2196f3" stroke-width="4" fill="none" stroke-linecap="round"/>
+  <!-- ④ 汇合点 → 下腔进液口（回流） -->
+  <path d="M1010,210 L1010,380 L380,380 L380,330 L350,330" stroke="#2196f3" stroke-width="4" fill="none" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#arrBlue)"/>
+
+  <!-- 汇合点 -->
+  <circle cx="545" cy="230" r="4.5" fill="#2196f3"/>
+  <circle cx="1010" cy="210" r="4.5" fill="#2196f3"/>
+
+  <!-- ================= 管路：校准支路（橙色虚线） ================= -->
+  <!-- ⑤ 标准液瓶 → V1 -->
+  <path d="M1140,117 L930,117" stroke="#ff9800" stroke-width="2.4" fill="none" stroke-dasharray="7,4" marker-end="url(#arrOrange)"/>
+  <!-- ⑥ V1 → 泵前 Y 三通 -->
+  <path d="M860,117 L545,117 L545,230" stroke="#ff9800" stroke-width="2.4" fill="none" stroke-dasharray="7,4" stroke-linejoin="round" marker-end="url(#arrOrange)"/>
+  <!-- ⑦ 汇合点 → V2 -->
+  <path d="M1010,210 L1030,210 L1030,420" stroke="#ff9800" stroke-width="2.4" fill="none" stroke-dasharray="7,4" stroke-linejoin="round" marker-end="url(#arrOrange)"/>
+  <!-- ⑧ V2 → 废液瓶 -->
+  <path d="M1030,475 L1030,490 L1140,490" stroke="#ff9800" stroke-width="2.4" fill="none" stroke-dasharray="7,4" stroke-linejoin="round" marker-end="url(#arrOrange)"/>
+
+  <!-- 叉号：校准模式下建议夹断的回流点 -->
+  <g stroke="#e0533d" stroke-width="2.4" stroke-linecap="round">
+    <line x1="700" y1="368" x2="716" y2="384"/>
+    <line x1="716" y1="368" x2="700" y2="384"/>
+  </g>
+  <text x="724" y="401" font-family="Microsoft YaHei, sans-serif" font-size="9.5" fill="#e0533d">校准时应夹断此处（否则标准液可能进培养腔）</text>
+
+  <!-- ================= 图例 ================= -->
+  <rect x="1105" y="210" width="350" height="150" rx="8" fill="#ffffff" stroke="#d5dbe2" stroke-width="1"/>
+  <text x="1120" y="232" font-family="Microsoft YaHei, sans-serif" font-size="11.5" font-weight="bold" fill="#1a1a2e">图例</text>
+  <line x1="1120" y1="252" x2="1160" y2="252" stroke="#2196f3" stroke-width="4"/>
+  <text x="1172" y="256" font-family="Microsoft YaHei, sans-serif" font-size="10.5" fill="#556677">正常循环（闭环）</text>
+  <line x1="1120" y1="278" x2="1160" y2="278" stroke="#ff9800" stroke-width="2.4" stroke-dasharray="7,4"/>
+  <text x="1172" y="282" font-family="Microsoft YaHei, sans-serif" font-size="10.5" fill="#556677">校准支路（预留）</text>
+  <line x1="1120" y1="304" x2="1160" y2="304" stroke="#4caf50" stroke-width="2" stroke-dasharray="7,4"/>
+  <text x="1172" y="308" font-family="Microsoft YaHei, sans-serif" font-size="10.5" fill="#556677">培养芯片边界</text>
+  <line x1="1120" y1="330" x2="1160" y2="330" stroke="#8a97a8" stroke-width="2" stroke-dasharray="7,4"/>
+  <text x="1172" y="334" font-family="Microsoft YaHei, sans-serif" font-size="10.5" fill="#556677">检测模块边界</text>
+
+  <!-- ================= 管段清单 ================= -->
+  <rect x="50" y="565" width="720" height="455" rx="12" fill="#f6f8fa" stroke="#d5dbe2" stroke-width="1"/>
+  <text x="70" y="595" font-family="Microsoft YaHei, sans-serif" font-size="15" font-weight="bold" fill="#1a1a2e">管段清单（先干接，后通水）</text>
+
+  <line x1="70" y1="640" x2="750" y2="640" stroke="#c9d1da" stroke-width="1"/>
+  <text x="70" y="625" font-family="Microsoft YaHei, sans-serif" font-size="11" font-weight="bold" fill="#334455">管段</text>
+  <text x="150" y="625" font-family="Microsoft YaHei, sans-serif" font-size="11" font-weight="bold" fill="#334455">从</text>
+  <text x="370" y="625" font-family="Microsoft YaHei, sans-serif" font-size="11" font-weight="bold" fill="#334455">到</text>
+  <text x="590" y="625" font-family="Microsoft YaHei, sans-serif" font-size="11" font-weight="bold" fill="#334455">接头 / 备注</text>
+
+  <text x="70" y="666" font-family="Microsoft YaHei, sans-serif" font-size="11" fill="#1565c0">①</text>
+  <text x="150" y="666" font-family="Microsoft YaHei, sans-serif" font-size="10.5" fill="#334455">下腔出液口</text>
+  <text x="370" y="666" font-family="Microsoft YaHei, sans-serif" font-size="10.5" fill="#334455">气泡阱入口</text>
+  <text x="590" y="666" font-family="Microsoft YaHei, sans-serif" font-size="10.5" fill="#556677">φ2 宝塔转 3mm + 硅胶管</text>
+
+  <text x="70" y="700" font-family="Microsoft YaHei, sans-serif" font-size="11" fill="#1565c0">②</text>
+  <text x="150" y="700" font-family="Microsoft YaHei, sans-serif" font-size="10.5" fill="#334455">气泡阱出口</text>
+  <text x="370" y="700" font-family="Microsoft YaHei, sans-serif" font-size="10.5" fill="#334455">循环泵入口</text>
+  <text x="590" y="700" font-family="Microsoft YaHei, sans-serif" font-size="10.5" fill="#556677">硅胶管（泵前段）</text>
+
+  <text x="70" y="734" font-family="Microsoft YaHei, sans-serif" font-size="11" fill="#1565c0">③</text>
+  <text x="150" y="734" font-family="Microsoft YaHei, sans-serif" font-size="10.5" fill="#334455">循环泵出口</text>
+  <text x="370" y="734" font-family="Microsoft YaHei, sans-serif" font-size="10.5" fill="#334455">电极流道入口</text>
+  <text x="590" y="734" font-family="Microsoft YaHei, sans-serif" font-size="10.5" fill="#556677">硅胶管</text>
+
+  <text x="70" y="768" font-family="Microsoft YaHei, sans-serif" font-size="11" fill="#1565c0">④</text>
+  <text x="150" y="768" font-family="Microsoft YaHei, sans-serif" font-size="10.5" fill="#334455">电极流道出口</text>
+  <text x="370" y="768" font-family="Microsoft YaHei, sans-serif" font-size="10.5" fill="#334455">下腔进液口</text>
+  <text x="590" y="768" font-family="Microsoft YaHei, sans-serif" font-size="10.5" fill="#556677">硅胶管（回流段）</text>
+
+  <text x="70" y="802" font-family="Microsoft YaHei, sans-serif" font-size="11" fill="#e65100">⑤</text>
+  <text x="150" y="802" font-family="Microsoft YaHei, sans-serif" font-size="10.5" fill="#334455">标准液瓶</text>
+  <text x="370" y="802" font-family="Microsoft YaHei, sans-serif" font-size="10.5" fill="#334455">切换阀 V1</text>
+  <text x="590" y="802" font-family="Microsoft YaHei, sans-serif" font-size="10.5" fill="#556677">硅胶管（校准预留）</text>
+
+  <text x="70" y="836" font-family="Microsoft YaHei, sans-serif" font-size="11" fill="#e65100">⑥</text>
+  <text x="150" y="836" font-family="Microsoft YaHei, sans-serif" font-size="10.5" fill="#334455">切换阀 V1</text>
+  <text x="370" y="836" font-family="Microsoft YaHei, sans-serif" font-size="10.5" fill="#334455">泵前 Y 三通</text>
+  <text x="590" y="836" font-family="Microsoft YaHei, sans-serif" font-size="10.5" fill="#556677">Y 型三通 3.2</text>
+
+  <text x="70" y="870" font-family="Microsoft YaHei, sans-serif" font-size="11" fill="#e65100">⑦</text>
+  <text x="150" y="870" font-family="Microsoft YaHei, sans-serif" font-size="10.5" fill="#334455">电极出口 Y 三通</text>
+  <text x="370" y="870" font-family="Microsoft YaHei, sans-serif" font-size="10.5" fill="#334455">排废阀 V2</text>
+  <text x="590" y="870" font-family="Microsoft YaHei, sans-serif" font-size="10.5" fill="#556677">Y 型三通 3.2</text>
+
+  <text x="70" y="904" font-family="Microsoft YaHei, sans-serif" font-size="11" fill="#e65100">⑧</text>
+  <text x="150" y="904" font-family="Microsoft YaHei, sans-serif" font-size="10.5" fill="#334455">排废阀 V2</text>
+  <text x="370" y="904" font-family="Microsoft YaHei, sans-serif" font-size="10.5" fill="#334455">废液瓶</text>
+  <text x="590" y="904" font-family="Microsoft YaHei, sans-serif" font-size="10.5" fill="#556677">硅胶管</text>
+
+  <line x1="70" y1="925" x2="750" y2="925" stroke="#c9d1da" stroke-width="1"/>
+  <text x="70" y="950" font-family="Microsoft YaHei, sans-serif" font-size="10.5" fill="#556677">· 管长按实际布置裁剪，宁长勿短，先留 20% 余量再剪。</text>
+  <text x="70" y="972" font-family="Microsoft YaHei, sans-serif" font-size="10.5" fill="#556677">· 硅胶管统一 内径 3 mm × 外径 5 mm；弯头用 L 型 3.0，分叉用 Y 型 3.2。</text>
+  <text x="70" y="994" font-family="Microsoft YaHei, sans-serif" font-size="10.5" fill="#556677">· 所有接头插到底，必要时用扎带或小卡箍固定，避免实验中被拉动脱落。</text>
+
+  <!-- ================= 装配顺序 ================= -->
+  <rect x="790" y="565" width="660" height="250" rx="12" fill="#f6f8fa" stroke="#d5dbe2" stroke-width="1"/>
+  <text x="810" y="595" font-family="Microsoft YaHei, sans-serif" font-size="15" font-weight="bold" fill="#1a1a2e">装配顺序（按这个来）</text>
+
+  <text x="810" y="626" font-family="Microsoft YaHei, sans-serif" font-size="11.5" font-weight="bold" fill="#1565c0">1. 干接</text>
+  <text x="855" y="626" font-family="Microsoft YaHei, sans-serif" font-size="11" fill="#556677">不通水，先把管、泵、阀、瓶按图连起来，确认走向和长度。</text>
+
+  <text x="810" y="656" font-family="Microsoft YaHei, sans-serif" font-size="11.5" font-weight="bold" fill="#1565c0">2. 试漏</text>
+  <text x="855" y="656" font-family="Microsoft YaHei, sans-serif" font-size="11" fill="#556677">装清水，泵低速跑 5 min，逐个接头检查渗漏。</text>
+
+  <text x="810" y="686" font-family="Microsoft YaHei, sans-serif" font-size="11.5" font-weight="bold" fill="#1565c0">3. 上液</text>
+  <text x="855" y="686" font-family="Microsoft YaHei, sans-serif" font-size="11" fill="#556677">确认无漏后，再换培养液 / 标准液，避免污染。</text>
+
+  <text x="810" y="716" font-family="Microsoft YaHei, sans-serif" font-size="11.5" font-weight="bold" fill="#1565c0">4. 固定</text>
+  <text x="855" y="716" font-family="Microsoft YaHei, sans-serif" font-size="11" fill="#556677">泵、阀、瓶固定到底板上，管路不要绷紧。</text>
+
+  <text x="810" y="746" font-family="Microsoft YaHei, sans-serif" font-size="11.5" font-weight="bold" fill="#1565c0">5. 校准支路</text>
+  <text x="880" y="746" font-family="Microsoft YaHei, sans-serif" font-size="11" fill="#556677">固件 CALIBRATE 目前是占位，先只留接口、不接液体。</text>
+
+  <text x="810" y="780" font-family="Microsoft YaHei, sans-serif" font-size="10.5" fill="#888">提示：先空转确认泵的进出方向，再接进回路；接反会把气泡推向电极。</text>
+
+  <!-- ================= 待确认 / 风险 ================= -->
+  <rect x="790" y="830" width="660" height="190" rx="12" fill="#fff4e5" stroke="#ff9800" stroke-width="1.5"/>
+  <text x="810" y="858" font-family="Microsoft YaHei, sans-serif" font-size="14" font-weight="bold" fill="#e65100">⚠ 动手前必须确认</text>
+
+  <text x="810" y="886" font-family="Microsoft YaHei, sans-serif" font-size="10.8" fill="#8a4b00">1. 阀 0520E 的实际接口尺寸（以实物丝印/接头为准），可能需要 φ4→φ3 转接。</text>
+  <text x="810" y="912" font-family="Microsoft YaHei, sans-serif" font-size="10.8" fill="#8a4b00">2. 两个常闭二通阀无法完全隔离校准液：校准模式下回流仍通，标准液可能进培养腔。</text>
+  <text x="810" y="932" font-family="Microsoft YaHei, sans-serif" font-size="10.8" fill="#e0533d">　 → 建议加第 3 个阀（GPIO14）夹断回流，或改用二位三通阀；否则校准只做离线。</text>
+  <text x="810" y="958" font-family="Microsoft YaHei, sans-serif" font-size="10.8" fill="#8a4b00">3. 气泡阱位置：说明书 4.6 要求「泵前」，v3 示意图画在泵后；本图按泵前绘制。</text>
+  <text x="810" y="984" font-family="Microsoft YaHei, sans-serif" font-size="10.8" fill="#8a4b00">4. 下腔 φ2 宝塔接头 ×2 是否已采购（见《下腔替代件加工图》材料清单）。</text>
+  <text x="810" y="1006" font-family="Microsoft YaHei, sans-serif" font-size="10.8" fill="#8a4b00">5. 泵的进出方向、阀的通径方向，接之前先空转/吹气确认。</text>
+
+</svg>

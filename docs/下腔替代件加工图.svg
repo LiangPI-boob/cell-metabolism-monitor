@@ -1,0 +1,153 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="860" viewBox="0 0 1200 860">
+  <title>下腔替代件 加工示意图（四层夹心结构）</title>
+
+  <rect x="0" y="0" width="1200" height="860" fill="#ffffff"/>
+
+  <!-- 标题 -->
+  <text x="600" y="36" font-family="Microsoft YaHei, sans-serif" font-size="22" font-weight="bold" text-anchor="middle" fill="#1a1a2e">下腔替代件 — 加工示意图</text>
+  <text x="600" y="58" font-family="Microsoft YaHei, sans-serif" font-size="13" text-anchor="middle" fill="#666">四层夹心结构：上片（培养井）+ PC膜 + 硅胶垫（下腔）+ 下片（进出液口）｜厚向已放大显示，非真实比例</text>
+
+  <!-- ============================================================
+       左：装配剖面（爆炸视图）
+       ============================================================ -->
+  <rect x="40" y="82" width="545" height="395" rx="10" ry="10" fill="#f6f8fa" stroke="#d5dbe2" stroke-width="1"/>
+  <text x="62" y="108" font-family="Microsoft YaHei, sans-serif" font-size="13" font-weight="bold" fill="#1a1a2e">① 装配剖面图（爆炸视图）</text>
+
+  <!-- 层1 上片（亚克力3mm） -->
+  <rect x="210" y="118" width="200" height="45" fill="#dbe4ee" stroke="#7c8b9d" stroke-width="2"/>
+  <rect x="285" y="118" width="50" height="45" fill="#ffffff" stroke="#5b8bb8" stroke-width="1.5"/>
+  <text x="310" y="145" font-family="Microsoft YaHei, sans-serif" font-size="9" fill="#1b3a5c" text-anchor="middle">培养井</text>
+  <text x="200" y="140" font-family="Microsoft YaHei, sans-serif" font-size="11" fill="#334455" text-anchor="end">上片</text>
+  <text x="200" y="155" font-family="Microsoft YaHei, sans-serif" font-size="10" fill="#667788" text-anchor="end">亚克力 3mm</text>
+
+  <!-- 层2 PC膜 -->
+  <rect x="270" y="178" width="80" height="10" fill="#f2a63d" stroke="#c97f1a" stroke-width="1.5"/>
+  <text x="200" y="186" font-family="Microsoft YaHei, sans-serif" font-size="11" fill="#7a4d05" text-anchor="end">PC 膜 0.4μm</text>
+
+  <!-- 层3 硅胶垫（下腔） -->
+  <rect x="210" y="203" width="200" height="20" fill="#c8e6c9" stroke="#66bb6a" stroke-width="2"/>
+  <rect x="285" y="203" width="50" height="20" fill="#bcd9f2" stroke="#5b8bb8" stroke-width="1.5"/>
+  <text x="310" y="217" font-family="Microsoft YaHei, sans-serif" font-size="8.5" fill="#1b3a5c" text-anchor="middle">下腔</text>
+  <text x="200" y="217" font-family="Microsoft YaHei, sans-serif" font-size="11" fill="#2e7d32" text-anchor="end">硅胶垫 1mm</text>
+
+  <!-- 层4 下片（进出液口） -->
+  <rect x="210" y="238" width="200" height="45" fill="#dbe4ee" stroke="#7c8b9d" stroke-width="2"/>
+  <rect x="290" y="238" width="10" height="45" fill="#ffffff" stroke="#5b8bb8" stroke-width="1.2"/>
+  <rect x="320" y="238" width="10" height="45" fill="#ffffff" stroke="#5b8bb8" stroke-width="1.2"/>
+  <text x="200" y="258" font-family="Microsoft YaHei, sans-serif" font-size="11" fill="#334455" text-anchor="end">下片</text>
+  <text x="200" y="272" font-family="Microsoft YaHei, sans-serif" font-size="10" fill="#667788" text-anchor="end">亚克力 3mm</text>
+
+  <!-- 装配顺序箭头 -->
+  <line x1="440" y1="122" x2="440" y2="278" stroke="#ff9800" stroke-width="1.5" stroke-dasharray="4,3"/>
+  <polygon points="440,285 435,275 445,275" fill="#ff9800"/>
+  <text x="452" y="152" font-family="Microsoft YaHei, sans-serif" font-size="10" fill="#e65100">装配顺序</text>
+  <text x="452" y="170" font-family="Microsoft YaHei, sans-serif" font-size="10" fill="#e65100">上→膜→垫→下</text>
+
+  <!-- 液体流向 -->
+  <polygon points="295,300 290,290 300,290" fill="#2196f3"/>
+  <text x="295" y="316" font-family="Microsoft YaHei, sans-serif" font-size="9" fill="#1565c0" text-anchor="middle">进</text>
+  <polygon points="325,290 320,300 330,300" fill="#2196f3"/>
+  <text x="325" y="316" font-family="Microsoft YaHei, sans-serif" font-size="9" fill="#1565c0" text-anchor="middle">出</text>
+
+  <!-- 尺寸标注 -->
+  <line x1="210" y1="338" x2="410" y2="338" stroke="#556677" stroke-width="1"/>
+  <line x1="210" y1="332" x2="210" y2="344" stroke="#556677" stroke-width="1"/>
+  <line x1="410" y1="332" x2="410" y2="344" stroke="#556677" stroke-width="1"/>
+  <text x="310" y="356" font-family="Microsoft YaHei, sans-serif" font-size="11" fill="#334455" text-anchor="middle">40 mm</text>
+
+  <!-- 关键尺寸表 -->
+  <rect x="62" y="378" width="500" height="86" rx="6" fill="#ffffff" stroke="#d5dbe2" stroke-width="1"/>
+  <text x="76" y="398" font-family="Microsoft YaHei, sans-serif" font-size="11" font-weight="bold" fill="#1a1a2e">关键尺寸</text>
+  <text x="76" y="418" font-family="Microsoft YaHei, sans-serif" font-size="10.5" fill="#556677">· 外形 40 × 40 mm（亚克力片、硅胶垫同尺寸）</text>
+  <text x="76" y="435" font-family="Microsoft YaHei, sans-serif" font-size="10.5" fill="#556677">· 培养井／下腔：φ10 mm　· 硅胶垫厚 1 mm　· 下腔体积 ≈ 78 μL</text>
+  <text x="76" y="452" font-family="Microsoft YaHei, sans-serif" font-size="10.5" fill="#556677">· PC 膜：φ16 mm 圆片（比下腔大一圈，压紧密封）</text>
+
+  <!-- ============================================================
+       右：俯视图
+       ============================================================ -->
+  <rect x="610" y="82" width="550" height="395" rx="10" ry="10" fill="#f6f8fa" stroke="#d5dbe2" stroke-width="1"/>
+  <text x="632" y="108" font-family="Microsoft YaHei, sans-serif" font-size="13" font-weight="bold" fill="#1a1a2e">② 俯视图（上片／下片打孔位置）</text>
+
+  <!-- 外框 40x40 -->
+  <rect x="785" y="175" width="200" height="200" fill="#eef2f6" stroke="#7c8b9d" stroke-width="2"/>
+
+  <!-- 四角 M3 螺栓孔 -->
+  <circle cx="810" cy="200" r="4" fill="#ffffff" stroke="#556677" stroke-width="1.2"/>
+  <circle cx="960" cy="200" r="4" fill="#ffffff" stroke="#556677" stroke-width="1.2"/>
+  <circle cx="810" cy="350" r="4" fill="#ffffff" stroke="#556677" stroke-width="1.2"/>
+  <circle cx="960" cy="350" r="4" fill="#ffffff" stroke="#556677" stroke-width="1.2"/>
+
+  <!-- 下腔 / 培养井 圆 -->
+  <circle cx="885" cy="275" r="25" fill="#bcd9f2" stroke="#5b8bb8" stroke-width="2"/>
+  <text x="885" y="272" font-family="Microsoft YaHei, sans-serif" font-size="9" fill="#1b3a5c" text-anchor="middle">φ10</text>
+  <text x="885" y="284" font-family="Microsoft YaHei, sans-serif" font-size="8" fill="#1b3a5c" text-anchor="middle">培养井/下腔</text>
+
+  <!-- 膜范围虚线圆 φ16 -->
+  <circle cx="885" cy="275" r="40" fill="none" stroke="#f2a63d" stroke-width="1.5" stroke-dasharray="5,4"/>
+  <text x="938" y="237" font-family="Microsoft YaHei, sans-serif" font-size="9" fill="#c97f1a">φ16 膜</text>
+
+  <!-- 进出液孔 φ2 -->
+  <circle cx="870" cy="275" r="5" fill="#ffffff" stroke="#2196f3" stroke-width="2"/>
+  <circle cx="900" cy="275" r="5" fill="#ffffff" stroke="#2196f3" stroke-width="2"/>
+  <text x="870" y="255" font-family="Microsoft YaHei, sans-serif" font-size="9" fill="#1565c0" text-anchor="middle">进液 φ2</text>
+  <text x="900" y="300" font-family="Microsoft YaHei, sans-serif" font-size="9" fill="#1565c0" text-anchor="middle">出液 φ2</text>
+
+  <!-- 尺寸线：总宽 -->
+  <line x1="785" y1="163" x2="985" y2="163" stroke="#556677" stroke-width="1"/>
+  <line x1="785" y1="157" x2="785" y2="169" stroke="#556677" stroke-width="1"/>
+  <line x1="985" y1="157" x2="985" y2="169" stroke="#556677" stroke-width="1"/>
+  <text x="885" y="156" font-family="Microsoft YaHei, sans-serif" font-size="10" fill="#334455" text-anchor="middle">40 mm</text>
+
+  <!-- 尺寸线：孔中心距 -->
+  <line x1="870" y1="392" x2="900" y2="392" stroke="#2196f3" stroke-width="1"/>
+  <line x1="870" y1="386" x2="870" y2="398" stroke="#2196f3" stroke-width="1"/>
+  <line x1="900" y1="386" x2="900" y2="398" stroke="#2196f3" stroke-width="1"/>
+  <text x="885" y="410" font-family="Microsoft YaHei, sans-serif" font-size="10" fill="#1565c0" text-anchor="middle">6 mm（各距中心 3 mm）</text>
+
+  <!-- 说明 -->
+  <text x="632" y="438" font-family="Microsoft YaHei, sans-serif" font-size="10.5" fill="#556677">· 四角 M3 螺栓孔：距边缘 5 mm（共同钻穿四层，靠螺栓夹紧密封）</text>
+  <text x="632" y="456" font-family="Microsoft YaHei, sans-serif" font-size="10.5" fill="#556677">· 上片只开 φ10 中心孔；下片只开两个 φ2 进出液孔</text>
+
+  <!-- ============================================================
+       底部：材料清单 + 加工步骤
+       ============================================================ -->
+  <rect x="40" y="495" width="1120" height="330" rx="12" ry="12" fill="#ffffff" stroke="#d5dbe2" stroke-width="1"/>
+
+  <!-- 材料清单 -->
+  <text x="62" y="523" font-family="Microsoft YaHei, sans-serif" font-size="14" font-weight="bold" fill="#1a1a2e">材料清单</text>
+  <rect x="62" y="536" width="500" height="266" rx="6" fill="#f6f8fa" stroke="#d5dbe2" stroke-width="1"/>
+
+  <text x="78" y="560" font-family="Microsoft YaHei, sans-serif" font-size="11.5" fill="#2e7d32">■ 亚克力板 3 mm 厚　×2 片（40×40 mm）</text>
+  <text x="78" y="584" font-family="Microsoft YaHei, sans-serif" font-size="11.5" fill="#c97f1a">■ PC 膜 0.4 μm　×1（剪成 φ16 mm 圆片，可多剪几片备用）</text>
+  <text x="78" y="608" font-family="Microsoft YaHei, sans-serif" font-size="11.5" fill="#2e7d32">■ 硅胶板 1 mm 厚　×1 片（40×40 mm）</text>
+  <text x="78" y="632" font-family="Microsoft YaHei, sans-serif" font-size="11.5" fill="#556677">■ M3 螺栓 + 螺母　×4 套</text>
+  <text x="78" y="656" font-family="Microsoft YaHei, sans-serif" font-size="11.5" fill="#556677">■ 宝塔接头（φ2 转 3 mm 管）　×2</text>
+  <text x="78" y="680" font-family="Microsoft YaHei, sans-serif" font-size="11.5" fill="#556677">■ 硅胶软管 内径 3 mm　若干</text>
+  <text x="78" y="710" font-family="Microsoft YaHei, sans-serif" font-size="11" fill="#888">工具：美工刀／手术刀、直尺、φ10 与 φ2 打孔器（或钻头）、</text>
+  <text x="78" y="728" font-family="Microsoft YaHei, sans-serif" font-size="11" fill="#888">镊子（拿膜用）、记号笔</text>
+
+  <rect x="62" y="748" width="500" height="40" rx="6" fill="#fff4e5" stroke="#ff9800" stroke-width="1"/>
+  <text x="76" y="764" font-family="Microsoft YaHei, sans-serif" font-size="10.5" fill="#e65100">⚠ 本替代件用于「方法可行性验证」，以结构走通为目标；</text>
+  <text x="76" y="780" font-family="Microsoft YaHei, sans-serif" font-size="10.5" fill="#e65100">　长期密封与漏液暂不作为验收项。</text>
+
+  <!-- 加工步骤 -->
+  <text x="610" y="523" font-family="Microsoft YaHei, sans-serif" font-size="14" font-weight="bold" fill="#1a1a2e">加工步骤</text>
+  <rect x="610" y="536" width="528" height="252" rx="6" fill="#f6f8fa" stroke="#d5dbe2" stroke-width="1"/>
+
+  <text x="626" y="562" font-family="Microsoft YaHei, sans-serif" font-size="11.5" font-weight="bold" fill="#1565c0">1. 裁片</text>
+  <text x="640" y="580" font-family="Microsoft YaHei, sans-serif" font-size="11" fill="#556677">亚克力裁 40×40 mm 两片；硅胶板裁 40×40 mm 一片</text>
+
+  <text x="626" y="606" font-family="Microsoft YaHei, sans-serif" font-size="11.5" font-weight="bold" fill="#1565c0">2. 上片打孔</text>
+  <text x="640" y="624" font-family="Microsoft YaHei, sans-serif" font-size="11" fill="#556677">中心打 φ10 mm 通孔 → 这就是「培养井」</text>
+
+  <text x="626" y="650" font-family="Microsoft YaHei, sans-serif" font-size="11.5" font-weight="bold" fill="#1565c0">3. 下片打孔</text>
+  <text x="640" y="668" font-family="Microsoft YaHei, sans-serif" font-size="11" fill="#556677">距中心左右各 3 mm 打两个 φ2 mm 通孔 → 装宝塔接头</text>
+
+  <text x="626" y="694" font-family="Microsoft YaHei, sans-serif" font-size="11.5" font-weight="bold" fill="#1565c0">4. 硅胶垫镂空</text>
+  <text x="640" y="712" font-family="Microsoft YaHei, sans-serif" font-size="11" fill="#556677">中心镂空 φ10 mm → 这就是「下腔」（1 mm 深）</text>
+
+  <text x="626" y="738" font-family="Microsoft YaHei, sans-serif" font-size="11.5" font-weight="bold" fill="#1565c0">5. 叠装夹紧</text>
+  <text x="640" y="756" font-family="Microsoft YaHei, sans-serif" font-size="11" fill="#556677">四角对齐，按「上片 → PC膜 → 硅胶垫 → 下片」叠好，</text>
+  <text x="640" y="773" font-family="Microsoft YaHei, sans-serif" font-size="11" fill="#556677">M3 螺栓穿过四角拧紧（先对角、后相邻，均匀受力）</text>
+
+</svg>
