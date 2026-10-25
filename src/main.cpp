@@ -74,6 +74,12 @@ extern uint32_t exp_param_stopflow_ms;
 extern uint32_t exp_param_calib_interval_ms;
 extern uint32_t exp_param_calib_ms;
 
+// 浓度换算标定（临时骨架：I = slope * C + intercept）
+float g_concSlope     = 0.0f;  // µA / mM
+float g_concIntercept = 0.0f;  // µA
+void loadConcCalib();
+void saveConcCalib();
+
 // Global mode control (sweep type)
 enum Sweep_Mode_Type
 {
@@ -179,6 +185,11 @@ int16_t volts[arr_samples] = {0}; // single sweep IV curve "V"
 float amps[arr_samples] = {0};    // single sweep IV curve "I"
 int32_t time_Voltammaogram[arr_samples] = {0};
 int number_of_valid_points_in_volts_amps_array = 0; // rest of them are all zeros...
+
+// runAmp 的三个阶段（pre-step / v1 / v2）在数组中的起止下标，
+// 供实验调度取“稳定段”电流用（批次 0=pre-step, 1=v1, 2=v2）
+uint16_t g_ampPhaseStart[3] = {0, 0, 0};
+uint16_t g_ampPhaseEnd[3]   = {0, 0, 0};
 
 // JSON string to sent over websockets to browswer client:
 // char Voltammogram_JSON_cstr[31000];
@@ -3149,6 +3160,8 @@ void runAmp(uint8_t lmpGain, int16_t pre_stepV, uint32_t quietTime,
     setLMPBias(voltageArray[i]);
     setVoltage(voltageArray[i]);
 
+    g_ampPhaseStart[i] = (uint16_t)number_of_valid_points_in_volts_amps_array;
+
     while (millis() - startTime < timeArray[i]) // default 2000, so for 2 seconds
     {
       // Serial.print("arr_cur_index = ");
@@ -3246,6 +3259,7 @@ void runAmp(uint8_t lmpGain, int16_t pre_stepV, uint32_t quietTime,
       arr_cur_index++;
       delay(fs);
     }
+    g_ampPhaseEnd[i] = (uint16_t)number_of_valid_points_in_volts_amps_array;
     digitalWrite(LEDPIN, HIGH); // off at end of sweep
   }
 
@@ -3742,6 +3756,17 @@ void handle_websocket_text(uint8_t *payload)
       int v = m_JSONdoc_from_payload["change_exp_calib_min"];
       if (v >= 1 && v <= 180) exp_param_calib_ms = (uint32_t)v * 60000UL;
     }
+    // ===== 浓度换算标定（临时手填；后续由在线校准自动写入）=====
+    if (m_key_string == "change_conc_slope")
+    {
+      g_concSlope = m_JSONdoc_from_payload["change_conc_slope"] | g_concSlope;
+      saveConcCalib();
+    }
+    if (m_key_string == "change_conc_intercept")
+    {
+      g_concIntercept = m_JSONdoc_from_payload["change_conc_intercept"] | g_concIntercept;
+      saveConcCalib();
+    }
   }
 
   // if (true == false) // if key = "change_cell_voltage_to"
@@ -4001,6 +4026,17 @@ void configureserver()
 
   server.on("/downloadfile", HTTP_GET, [](AsyncWebServerRequest *request)
             { request->send(SPIFFS, "/data.txt", "text/plain", true); });
+
+  // 下载实验存档（每次静测一行，追加写入）
+  server.on("/download_exp", HTTP_GET, [](AsyncWebServerRequest *request)
+            {
+              if (!SPIFFS.exists("/experiment.csv"))
+              {
+                request->send(404, "text/plain", "no experiment data");
+                return;
+              }
+              request->send(SPIFFS, "/experiment.csv", "text/csv", true);
+            });
 
   server.on("/rebootnanostat", HTTP_GET, [](AsyncWebServerRequest *request)
             {
@@ -4267,6 +4303,7 @@ void setup()
 
   // SPIFFS.remove("/calibration.JSON"); // manual delete to test code.
   readCalFile();
+  loadConcCalib(); // 读取浓度换算系数（不存在则不启用）
 
   Serial.println("[SLAVE] TCP server on 192.168.4.1:3333");
 
@@ -4465,6 +4502,8 @@ bool     g_slaveOnline     = false;
 bool     g_slavePumpOn     = false;
 bool     g_slaveValve0     = false;
 bool     g_slaveValve1     = false;
+bool     g_slaveReportedFault = false;   // 从机主动上报了 fault
+String   g_slaveFaultCode     = "";
 
 // 发一行 JSON 给从机；未连接时直接丢弃，绝不阻塞
 void slaveSend(const String& json)
@@ -4575,6 +4614,13 @@ void slaveLoop()
       }
     }
 
+    // 从机主动上报故障：等实验调度下一圈统一处理
+    if (m_evt == "fault")
+    {
+      g_slaveReportedFault = true;
+      g_slaveFaultCode = (const char*)(m_slaveDoc["code"] | "E_SLAVE");
+    }
+
     // 转发给网页，方便在浏览器里看到从机状态
     m_websocketserver.broadcastTXT(m_line.c_str(), m_line.length());
   }
@@ -4617,7 +4663,17 @@ uint32_t      g_expLastCalibMs = 0;
 uint32_t      g_expLastPingMs  = 0;
 uint32_t      g_expLastStatusMs = 0;
 uint32_t      g_expLastBcastMs  = 0;
+uint32_t      g_expStartMs      = 0;   // 本次实验启动时刻
 unsigned long g_expCmdId       = 200;
+
+bool     g_expFault     = false;   // 实验故障（从机掉线 / 从机报错）
+String   g_expFaultCode = "";
+uint32_t g_expSessionStartMs = 0;  // 本次实验数据记录的起点
+
+// 最近一次静测结果
+float g_lastCurrentUA = 0.0f;
+float g_lastConc      = 0.0f;
+bool  g_lastConcValid = false;
 
 // 可调参数（默认值，后续可从网页下发）
 uint32_t exp_param_circulate_ms      = 300000UL;    // 循环均质  5 min
@@ -4634,6 +4690,137 @@ const char* expStateName(ExpState s)
     case EXP_STOP_FLOW: return "STOP_FLOW";
     case EXP_MEASURE:   return "MEASURE";
     default:            return "CALIBRATE";
+  }
+}
+
+/* ---------------- 浓度标定（临时骨架） ---------------- */
+void loadConcCalib()
+{
+  File f = SPIFFS.open("/cell_calib.json", "r");
+  if (!f)
+  {
+    Serial.println("[CAL] 未找到 /cell_calib.json，浓度换算未启用");
+    return;
+  }
+  StaticJsonDocument<256> d;
+  DeserializationError err = deserializeJson(d, f);
+  f.close();
+  if (err)
+  {
+    Serial.println("[CAL] cell_calib.json 解析失败");
+    return;
+  }
+  g_concSlope     = d["slope"] | 0.0f;
+  g_concIntercept = d["intercept"] | 0.0f;
+  Serial.printf("[CAL] slope=%.4f uA/mM, intercept=%.4f uA\n", g_concSlope, g_concIntercept);
+}
+
+void saveConcCalib()
+{
+  File f = SPIFFS.open("/cell_calib.json", "w");
+  if (!f)
+  {
+    Serial.println("[CAL] 无法写入 cell_calib.json");
+    return;
+  }
+  String s = "{\"slope\":";
+  s += String(g_concSlope, 4);
+  s += ",\"intercept\":";
+  s += String(g_concIntercept, 4);
+  s += "}";
+  f.print(s);
+  f.close();
+  Serial.print("[CAL] 已保存 ");
+  Serial.println(s);
+}
+
+/* ---------------- 实验数据存档 ---------------- */
+void expLogAppend(uint32_t cycle, const char *type, float currentUA, float conc,
+                  bool concValid, const char *note);
+
+void expLogBeginSession()
+{
+  File f = SPIFFS.open("/experiment.csv", "a");
+  if (!f)
+  {
+    Serial.println("[LOG] 无法打开 /experiment.csv");
+    return;
+  }
+  if (f.size() == 0)
+  {
+    f.println("uptime_ms,session_ms,cycle,type,current_uA,conc_mM,slope_uA_per_mM,intercept_uA,note");
+  }
+  f.close();
+  expLogAppend(0, "SESSION_START", 0, 0, false, "");
+}
+
+void expLogAppend(uint32_t cycle, const char *type, float currentUA, float conc,
+                  bool concValid, const char *note)
+{
+  File f = SPIFFS.open("/experiment.csv", "a");
+  if (!f)
+  {
+    Serial.println("[LOG] 追加失败：/experiment.csv");
+    return;
+  }
+  f.print(millis());
+  f.print(',');
+  f.print(millis() - g_expSessionStartMs);
+  f.print(',');
+  f.print(cycle);
+  f.print(',');
+  f.print(type);
+  f.print(',');
+  f.print(currentUA, 4);
+  f.print(',');
+  if (concValid) f.print(conc, 4);
+  f.print(',');
+  f.print(g_concSlope, 4);
+  f.print(',');
+  f.print(g_concIntercept, 4);
+  f.print(',');
+  f.println(note ? note : "");
+  f.close();
+}
+
+/* ---------------- 静测电流取稳定段 ---------------- */
+float expStableCurrent()
+{
+  int s = g_ampPhaseStart[1];   // 阶段 1 = 第一段保持电位 v1
+  int e = g_ampPhaseEnd[1];
+  if (e <= s || e > number_of_valid_points_in_volts_amps_array)
+  {
+    s = 0;
+    e = number_of_valid_points_in_volts_amps_array;
+  }
+  int n = e - s;
+  if (n <= 0) return 0.0f;
+
+  int start = s + (n * 7) / 10;   // 取该阶段后 30% 作为稳定段
+  if (start >= e) start = s;
+
+  double sum = 0;
+  int cnt = 0;
+  for (int i = start; i < e; i++)
+  {
+    sum += amps[i];
+    cnt++;
+  }
+  return cnt ? (float)(sum / cnt) : 0.0f;
+}
+
+void expUpdateConcentration(float currentUA)
+{
+  g_lastCurrentUA = currentUA;
+  if (fabs(g_concSlope) > 1e-6)
+  {
+    g_lastConc      = (currentUA - g_concIntercept) / g_concSlope;
+    g_lastConcValid = true;
+  }
+  else
+  {
+    g_lastConc      = 0.0f;
+    g_lastConcValid = false;
   }
 }
 
@@ -4670,7 +4857,20 @@ void expBroadcastState()
   s += String(exp_param_calib_ms / 60000UL);
   s += ",\"slave_link\":\"";
   s += (g_slaveOnline ? "online" : "offline");
-  s += "\"";
+  s += "\",\"exp_fault\":";
+  s += (g_expFault ? "true" : "false");
+  s += ",\"exp_fault_code\":\"";
+  s += g_expFaultCode;
+  s += "\",\"last_current_ua\":";
+  s += String(g_lastCurrentUA, 4);
+  s += ",\"conc_valid\":";
+  s += (g_lastConcValid ? "true" : "false");
+  s += ",\"last_conc\":";
+  s += String(g_lastConc, 4);
+  s += ",\"calib_slope\":";
+  s += String(g_concSlope, 4);
+  s += ",\"calib_intercept\":";
+  s += String(g_concIntercept, 4);
   s += "}";
   m_websocketserver.broadcastTXT(s.c_str(), s.length());
   Serial.print("[EXP] ");
@@ -4685,6 +4885,19 @@ void expPumpRun()
             ",\"cmd\":\"pump\",\"ch\":0,\"speed\":50,\"ms\":" + String(m_ms) + "}");
 }
 
+// 进入实验故障态：停泵关阀、记录、通知网页
+void expFault(const char *code)
+{
+  Serial.print("[EXP] FAULT: ");
+  Serial.println(code);
+  slaveSend("{\"id\":" + String(g_expCmdId++) + ",\"cmd\":\"stop_all\"}");
+  g_expState     = EXP_IDLE;
+  g_expFault     = true;
+  g_expFaultCode = code;
+  expLogAppend(g_expCycleIdx, "FAULT", g_lastCurrentUA, g_lastConc, g_lastConcValid, code);
+  expBroadcastState();
+}
+
 // 启动实验
 void expStart()
 {
@@ -4696,13 +4909,23 @@ void expStart()
     return;
   }
 
+  uint32_t now     = millis();
   g_expCycleIdx    = 0;
-  g_expLastCalibMs = millis();
-  g_expLastPingMs  = millis();
-  g_expLastStatusMs = millis();
-  g_expLastBcastMs  = millis();
-  g_expStateStart  = millis();
+  g_expLastCalibMs = now;
+  g_expLastPingMs  = now;
+  g_expLastStatusMs = now;
+  g_expLastBcastMs  = now;
+  g_expStateStart  = now;
+  g_expStartMs     = now;
+  g_expSessionStartMs = now;
   g_expState       = EXP_CIRCULATE;
+  g_expFault       = false;
+  g_expFaultCode   = "";
+  g_slaveReportedFault = false;
+  g_lastCurrentUA  = 0.0f;
+  g_lastConc       = 0.0f;
+  g_lastConcValid  = false;
+  expLogBeginSession();
   expPumpRun();
   Serial.println("=== 实验启动 ===");
   expBroadcastState();
@@ -4712,8 +4935,11 @@ void expStart()
 void expStop()
 {
   slaveSend("{\"id\":" + String(g_expCmdId++) + ",\"cmd\":\"stop_all\"}");
-  g_expState = EXP_IDLE;
+  g_expState     = EXP_IDLE;
+  g_expFault     = false;
+  g_expFaultCode = "";
   Sweep_Mode = dormant;
+  expLogAppend(g_expCycleIdx, "STOP", g_lastCurrentUA, g_lastConc, g_lastConcValid, "user stop");
   Serial.println("=== 实验停止 ===");
   expBroadcastState();
 }
@@ -4734,8 +4960,28 @@ void expRunMeasure()
 // 调度主函数，每圈 loop 调一次
 void serviceExperiment()
 {
-  if (g_expState == EXP_IDLE) return;
+  if (g_expState == EXP_IDLE)
+  {
+    // 空闲时从机可能因 120 s 心跳超时上报 fault，不算实验故障
+    g_slaveReportedFault = false;
+    return;
+  }
   uint32_t now = millis();
+
+  // 从机主动上报故障
+  if (g_slaveReportedFault)
+  {
+    g_slaveReportedFault = false;
+    expFault(g_slaveFaultCode.c_str());
+    return;
+  }
+
+  // 实验中链路断开：启动 5 s 后开始判定，避免刚启动的瞬时误判
+  if (!g_slaveOnline && (now - g_expStartMs > 5000UL))
+  {
+    expFault("E_SLAVE_OFFLINE");
+    return;
+  }
 
   // 每 5 秒查询一次从机状态（泵/阀实际状态）
   if (now - g_expLastStatusMs >= 5000UL)
@@ -4779,7 +5025,13 @@ void serviceExperiment()
       if (now - g_expStateStart >= 2000)   // 进入后等 2 秒再测
       {
         expRunMeasure();          // 阻塞：跑完一次安培法
+
+        float m_current = expStableCurrent();
+        expUpdateConcentration(m_current);
         g_expCycleIdx++;
+        expLogAppend(g_expCycleIdx, "MEASURE", m_current, g_lastConc, g_lastConcValid, "");
+        Serial.printf("[EXP] cycle=%u  I=%.4f uA  C=%.4f mM (valid=%d)\n",
+                      g_expCycleIdx, m_current, g_lastConc, g_lastConcValid);
 
         if (millis() - g_expLastCalibMs >= exp_param_calib_interval_ms)
         {
@@ -4800,6 +5052,8 @@ void serviceExperiment()
       if (now - g_expStateStart >= exp_param_calib_ms)
       {
         g_expLastCalibMs = millis();
+        expLogAppend(g_expCycleIdx, "CALIBRATE_PLACEHOLDER", 0, 0, false,
+                     "standard-liquid branch not implemented");
         g_expState       = EXP_CIRCULATE;
         g_expStateStart  = millis();
         expPumpRun();

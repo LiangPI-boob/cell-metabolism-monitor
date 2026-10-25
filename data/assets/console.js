@@ -82,7 +82,15 @@
       scale: "y",
       stroke: "#2563eb",
       width: 1.5,
-      points: { show: true, size: 4, width: 0, fill: "#2563eb" },
+      // uPlot 的 points.show 必须是函数；点数过多时隐藏标记
+      points: {
+        show: function (u) {
+          return !u || !u.data || u.data[0].length <= 300;
+        },
+        size: 4,
+        width: 0,
+        fill: "#2563eb",
+      },
       value: function (u, v) {
         return v == null ? "--" : v.toFixed(3);
       },
@@ -96,7 +104,7 @@
       stroke: "#d97706",
       width: 1,
       dash: [4, 3],
-      points: { show: false },
+      points: { show: function () { return false; } },
       value: function (u, v) {
         return v == null ? "--" : v.toFixed(0);
       },
@@ -143,12 +151,10 @@
       const opts = plotOpts(kind);
       opts.width = width;
       opts.height = height;
-      opts.series[1].points.show = data[0].length <= 300;
       slot.plot = new uPlot(opts, data, slot.el);
       return;
     }
 
-    slot.plot.series[1].points.show = data[0].length <= 300;
     if (slot.plot.width !== width || slot.plot.height !== height) {
       slot.plot.setSize({ width: width, height: height });
     }
@@ -231,6 +237,28 @@
     syncInput("exp-stopflow-min", msg.stopflow_min);
     syncInput("exp-calib-interval-h", msg.calib_interval_h);
     syncInput("exp-calib-min", msg.calib_min);
+    syncInput("conc-slope", msg.calib_slope);
+    syncInput("conc-intercept", msg.calib_intercept);
+
+    if ("last_current_ua" in msg) {
+      const currentEl = $("#last-current");
+      if (currentEl) currentEl.textContent = NS.fmt(msg.last_current_ua, 4) + " µA";
+    }
+    if ("conc_valid" in msg) {
+      const concEl = $("#last-conc");
+      if (concEl) concEl.textContent = msg.conc_valid ? NS.fmt(msg.last_conc, 4) + " mM" : "--";
+    }
+
+    const faultEl = $("#exp-fault");
+    if (faultEl) {
+      if (msg.exp_fault) {
+        faultEl.textContent = "实验故障：" + (msg.exp_fault_code || "UNKNOWN");
+        faultEl.classList.remove("hidden");
+      } else {
+        faultEl.textContent = "";
+        faultEl.classList.add("hidden");
+      }
+    }
 
     const startBtn = $("#btn-start-exp");
     const stopBtn = $("#btn-stop-exp");
@@ -448,6 +476,8 @@
       "exp-stopflow-min": "change_exp_stopflow_min",
       "exp-calib-interval-h": "change_exp_calib_interval_h",
       "exp-calib-min": "change_exp_calib_min",
+      "conc-slope": "change_conc_slope",
+      "conc-intercept": "change_conc_intercept",
     };
     Object.keys(map).forEach((id) => {
       const el = document.getElementById(id);
@@ -491,6 +521,55 @@
       clearTimeout(timer);
       timer = setTimeout(refreshCharts, 150);
     });
+  }
+
+  /* ---------- 本地演示（index.html?demo=1） ---------- */
+  function startDemo() {
+    const t0 = Date.now();
+    setInterval(function () {
+      const elapsed = (Date.now() - t0) / 1000;
+      const slot = Math.floor(elapsed) % 60;
+      let expState;
+      if (slot < 25) expState = "CIRCULATE";
+      else if (slot < 40) expState = "STOP_FLOW";
+      else if (slot < 47) expState = "MEASURE";
+      else expState = "CIRCULATE";
+
+      const fault = slot >= 52 && slot < 56;
+      if (fault) expState = "IDLE";
+
+      const current = 12.0 + 0.8 * Math.sin(elapsed / 6) + (Math.random() - 0.5) * 0.12;
+      const conc = (current - 1.0) / 2.4;
+
+      NS.emit("json", {
+        exp_state: expState,
+        exp_cycle: 1 + Math.floor(elapsed / 60),
+        calib_in_ms: Math.max(0, 600000 - (elapsed * 1000) % 600000),
+        pump_on: expState === "CIRCULATE",
+        valve0: false,
+        valve1: false,
+        slave_link: "online",
+        exp_fault: fault,
+        exp_fault_code: fault ? "DEMO_FAULT" : "",
+        last_current_ua: current,
+        conc_valid: true,
+        last_conc: conc,
+        calib_slope: 2.4,
+        calib_intercept: 1.0,
+        circulate_min: 5,
+        stopflow_min: 5,
+        calib_interval_h: 6,
+        calib_min: 3,
+      });
+
+      NS.emit("json", {
+        time: elapsed * 1000,
+        amps: current,
+        volts: 100,
+        analog_read_avg_bits: 2048 + Math.round(Math.random() * 8),
+        analog_read_avg_mV: 1650 + Math.random() * 2,
+      });
+    }, 1000);
   }
 
   /* ---------- 启动 ---------- */
@@ -540,5 +619,7 @@
     NS.on("close", function () {
       setBadge($("#slave-badge"), "从机离线", "off");
     });
+
+    if (NS.demo) startDemo();
   });
 })();
