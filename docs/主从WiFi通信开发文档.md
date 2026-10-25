@@ -1,7 +1,7 @@
 # 主从 Wi-Fi 通信开发文档
 
-> 版本：v0.1（草案）
-> 日期：2026-10-20
+> 版本：v0.2（**已实机验证**，初稿 v0.1 草案 2026-10-20）
+> 日期：2026-10-25
 > 任务范围：**主机 ESP32Stat（ESP32-PICO-D4 + LMP91000）↔ 从机 ESP32E（ESP32 开发板）** 之间改用 2.4 GHz Wi-Fi 承载现有 JSON 行协议，替代实物上无法接线的 UART 方案。
 > 关联文档：《开发方案.md》《硬件交接单.md》《软件需求说明书.md》《项目进度总结.md》
 
@@ -18,6 +18,39 @@
 1. **从机保留本地安全联锁**：心跳超时停泵关阀、阀 30 s 上限、泵有限时长。安全动作绝不能依赖 Wi-Fi 是否在线。
 2. **主机改为 APSTA**：当前固件是“连上路由器就只做 STA，连不上才开 AP”，需要改成“AP 常开（给从机连）+ STA 可选（给用户上网）”。
 3. **泵命令不再用 `ms=0` 常开**：改为“本阶段时长 + 余量”的有限时长，链路断开时泵也能自己停。
+
+---
+
+## 0.1 实施状态（2026-10-25）
+
+**代码已全部落地并在两块实板上跑通链路。** 与 v0.1 草案相比的实际情况：
+
+| 项 | 状态 |
+|---|---|
+| 主机 APSTA + TCP Server 3333 | ✅ 已实现并烧录（COM6） |
+| 从机 STA + TCP Client + `hello` 鉴权 | ✅ 已实现并烧录（COM5） |
+| 5 s 心跳 / 120 s 超时 / 20 s 判离线 | ✅ 已实现，实测在线 |
+| 单客户端限制 / key 校验失败断开 | ✅ 已实现 |
+| 泵命令改有限时长（`ms = 本段时长 + 60 s`） | ✅ 已实现 |
+| 从机心跳超时重复上报 `fault` | ✅ 已修复（`g_safeLatched`，见 §6.3） |
+| T1 / T2 链路测试 | ✅ 2026-10-25 实测通过（见 §9.3） |
+| T3–T8（命令一致性 / 断线 / 换信道 / 24 h / EMI / 网页回归） | ⬜ 待台架实测 |
+
+**实测链路证据**
+
+```json
+// GET http://nanostat.local/netinfo
+{"ap_ssid":"NanoStatAP","ap_ip":"192.168.4.1","ap_clients":1,
+ "sta_connected":true,"sta_ssid":"OnePlus Ace 5 Pro 5B70",
+ "sta_ip":"10.19.243.225","sta_rssi":-52,"mdns":"nanostat.local"}
+
+// 连 ws://10.19.243.225:81/ 收到的第一帧
+{"exp_state":"IDLE","exp_cycle":0,"calib_in_ms":0,"pump_on":false,"valve0":false,
+ "valve1":false,"circulate_min":5,"stopflow_min":5,"calib_interval_h":6,
+ "calib_min":3,"slave_link":"online"}
+```
+
+> `ap_clients:1` + `slave_link:"online"` 同时成立，说明从机已入网、TCP 已连接、`hello` 鉴权通过、心跳正常。
 
 ---
 
@@ -147,7 +180,7 @@ Wi-Fi 使用射频外设，不占用上述 GPIO；`Serial2` 可以保留做备�
 | 参数 | 建议值 | 说明 |
 |------|--------|------|
 | AP SSID | `NanoStatAP` | 沿用现有名称 |
-| AP 密码 | WPA2，≥8 位（**待确认**） | 当前是无密码；见 §10 |
+| AP 密码 | WPA2，≥8 位 | **已实现**：编译期宏 `AP_PASSWORD`（`src/wifi_credentials.h`，不入库）；从机 `SLAVE_WIFI_PASS` 必须与之相同 |
 | AP IP | `192.168.4.1/24` | ESP32 SoftAP 默认值；若实验室路由器也用 `192.168.4.x` 需改 |
 | AP 信道 | `0`（跟随 STA） | STA 未连接时默认 1；连上路由器后 AP 会跟随路由器信道 |
 | DHCP | 主机 AP 内置 | 从机自动获取 `192.168.4.x` |
@@ -494,7 +527,7 @@ void wifiTick()
 - `sendEventFault()` / 心跳上报需要写到“所有在线通道”，保持现有“双通道都发”的语义。
 - `g_lastCmdMs` 在收到任一通道的命令时刷新，USB 调试不会干扰 TCP 链路。
 
-### 6.3 已发现的现有缺陷（本任务必须一并修复）
+### 6.3 已发现的现有缺陷（已修复）
 
 **心跳超时后会无限重复上报 `evt:"fault"`。**
 
@@ -514,6 +547,8 @@ if (g_state != ST_FAULT && (now - g_lastCmdMs > HEARTBEAT_TIMEOUT_MS)) {
 
 1. 在 `enterSafe()` 末尾执行 `g_lastCmdMs = millis();`，让超时计时重新开始（即每 120 s 最多报一次）；
 2. 增加 `bool g_safeReported`，进入安全态时置位，收到任意有效命令时清零，只在首次上报。
+
+> **已采用方案 2 落地（2026-10-25）**：`slave_firmware.ino` 新增 `bool g_safeLatched`（第 78 行），`enterSafe()` 里置 `true`（第 227 行），收到任意命令时清 `false`（第 236 行），`loop()` 的判据改为 `if (!g_safeLatched && (now - g_lastCmdMs > HEARTBEAT_TIMEOUT_MS))`（第 395 行）。实测：超时后只报一次 `fault`，不再刷屏。
 
 同时主机侧要保证**链路在线时空闲阶段也每 5 s 发 `ping`**，否则从机会周期性误判“主机失联”。
 
@@ -614,6 +649,23 @@ LMP91000 是低频/直流恒电位仪，2.4 GHz 不在其信号带内，**直接
 
 > 这些是工程目标，不是硬实时指标。所有执行器定时仍在从机本地完成，网络延迟只影响“命令什么时候开始”。
 
+### 9.3 实测记录
+
+**2026-10-25（两块实板，笔记本同时接两块板的 USB）**
+
+| 阶段 | 结果 | 记录 |
+|------|------|------|
+| T1 链路 | ✅ 通过 | `GET /netinfo`：`ap_clients:1`、`sta_connected:true`、`sta_rssi:-52` |
+| T2 从机入网 | ✅ 通过 | 从机串口 `{"evt":"boot","fw":"slave-1.2",...}` + 5 s 一次 `hb`；主机 WebSocket 收到 `"slave_link":"online"` |
+| T3 命令一致性 | ⬜ 未做 | 受 §6 泵电平问题影响，动作无法肉眼验证；响应一致性可单独先测 |
+| T4 断线安全 | ⬜ 未做 | 需在循环阶段断链观察泵是否按时停 |
+| T5 信道切换 | ⬜ 未做 | — |
+| T6 长时间 | ⬜ 未做 | — |
+| T7 EMI | ⬜ 未做 | — |
+| T8 网页回归 | 🟡 部分 | 路由器模式（`nanostat.local`）已验证；热点直连 `192.168.4.1` 待复核 |
+
+**台架环境**：主机 STA 连手机热点 `OnePlus Ace 5 Pro 5B70`（`10.19.243.225`，RSSI −52 dBm），从机连 `NanoStatAP` 后 DHCP 拿 `192.168.4.x`。
+
 ---
 
 ## 10. 风险与待确认项
@@ -633,26 +685,91 @@ LMP91000 是低频/直流恒电位仪，2.4 GHz 不在其信号带内，**直接
 
 ## 11. 交付物与完成标准（DoD）
 
-- [ ] 主机固件：APSTA + TCP Server + 链路状态 + 有限时长泵命令
-- [ ] 从机固件：Wi-Fi STA + TCP Client + 非阻塞重连 + `hello`
-- [ ] 修复从机心跳超时后重复上报 `fault` 的缺陷（§6.3）
-- [ ] 协议文档与代码一致（命令、事件、错误码）
-- [ ] `slave/slave_firmware/wifi_secrets.h` 与主机 AP 密码纳入 `.gitignore`
-- [ ] T1–T8 测试记录（含 24 h 记录、EMI 五组数据）
-- [ ] 更新 `README.md` 的双板连接说明（删除不可实施的 UART 接线）（已完成）
-- [ ] 更新《开发方案.md》§2.4 的物理层描述（UART → Wi-Fi TCP）（已完成）
-- [ ] 台架演示：网页启动实验 → 循环/停流/静测全流程，从机状态实时可见
+- [x] 主机固件：APSTA + TCP Server + 链路状态 + 有限时长泵命令
+- [x] 从机固件：Wi-Fi STA + TCP Client + 非阻塞重连 + `hello`
+- [x] 修复从机心跳超时后重复上报 `fault` 的缺陷（§6.3）
+- [x] 协议文档与代码一致（命令、事件、错误码）
+- [x] `slave/slave_firmware/wifi_secrets.h` 与主机 AP 密码纳入 `.gitignore`
+- [ ] T1–T8 测试记录（含 24 h 记录、EMI 五组数据）——T1/T2 已完成，其余待测
+- [x] 更新 `README.md` 的双板连接说明（删除不可实施的 UART 接线）
+- [x] 更新《开发方案.md》§2.4 的物理层描述（UART → Wi-Fi TCP）
+- [ ] 台架演示：网页启动实验 → 循环/停流/静测全流程，从机状态实时可见（受泵电平问题阻塞）
 
 ---
 
 ## 12. 实施顺序
 
-1. **链路最小闭环**：主机开 AP + TCP Server，PC 当客户端发 `ping/status`。
-2. **从机入网**：从机连 AP、连 TCP、发 `hello`，主机识别在线。
-3. **协议打通**：TCP 上跑通泵/阀/全停/状态，行为与 USB 串口一致。
-4. **调度接入**：替换 `slaveSend()`，泵改有限时长，心跳 5 s，重连后对账。
-5. **可靠性加固**：断线、重启、换信道、24 h。
-6. **EMI 验证与整机联调**：按 §8.3 与 §9 执行，记录数据。
+1. **链路最小闭环**：主机开 AP + TCP Server，PC 当客户端发 `ping/status`。（✅ 2026-10-25）
+2. **从机入网**：从机连 AP、连 TCP、发 `hello`，主机识别在线。（✅ 2026-10-25）
+3. **协议打通**：TCP 上跑通泵/阀/全停/状态，行为与 USB 串口一致。（⬜ 待测）
+4. **调度接入**：替换 `slaveSend()`，泵改有限时长，心跳 5 s，重连后对账。（✅）
+5. **可靠性加固**：断线、重启、换信道、24 h。（⬜ 待测）
+6. **EMI 验证与整机联调**：按 §8.3 与 §9 执行，记录数据。（⬜ 待测）
+
+---
+
+## 13. 实机部署与验证手册（2026-10-25 补充）
+
+> 本节是给「下一个接手的人 / 下一个 AI 会话」的操作手册，照做即可复现当前状态。
+
+### 13.1 两块板的身份
+
+| | 主机 NanoStat | 从机 ESP32 |
+|---|---|---|
+| 芯片 | ESP32-PICO-D4 rev1.1 | ESP32-D0WD-V3 |
+| MAC | `a4:f0:0f:1c:ee:34` | `ec:c9:ff:fe:c3:d0` |
+| 串口芯片 | CP210x，SN **`02DA3ECE`** → **COM6** | CP210x，SN **`0001`** → **COM5** |
+| 编译方式 | PlatformIO `[env:pico32]` | Arduino IDE / 临时 PIO 工程（`board=esp32dev`，ArduinoJson **7.x**） |
+
+**端口号会变，序列号不会**：烧录前先 `pio device list`，按 `SER=` 认板。
+
+### 13.2 烧录命令
+
+```powershell
+$pio = "C:\Users\Liang\.platformio\penv\Scripts\pio.exe"
+cd f:\Trae\project\cell-metabolism-monitor
+
+& $pio run -e pico32 -t upload   --upload-port COM6   # 主机固件
+& $pio run -e pico32 -t uploadfs --upload-port COM6   # 网页（会清空 SPIFFS）
+```
+
+从机：Arduino IDE 打开 `slave/slave_firmware/slave_firmware.ino`，开发板选 **ESP32 Dev Module**，端口 COM5，上传。
+（若用临时 PIO 工程：把 `.ino` 放进 `src/`、`wifi_secrets.h` 同目录，`lib_deps = bblanchon/ArduinoJson@^7.0.0`，`platform` 可指向本机 `~/.platformio/platforms/espressif32` 以免联网。）
+
+### 13.3 上线顺序
+
+1. 先给主机上电（USB 或 5V），等 **30–60 s**：`NanoStatAP` 出现、LED 闪 15 次即初始化完成。
+2. 再给从机上电，约 3–10 s 内自动连上 `NanoStatAP` 并 TCP 连 `192.168.4.1:3333`。
+3. 浏览器打开 `http://nanostat.local/`（主机已连路由器/热点）或连 `NanoStatAP` 后开 `http://192.168.4.1/`。
+
+### 13.4 三条免代码验证
+
+```powershell
+# 1) 网络与 AP 客户端数
+curl.exe -s --noproxy "*" http://nanostat.local/netinfo
+
+# 2) WebSocket 状态帧（期望 "slave_link":"online"）
+#    用任意 WS 客户端连 ws://<主机IP>:81/
+
+# 3) 从机串口（COM5, 115200）：应每 5 s 一条 hb
+```
+
+> 注意：**打开 COM6 会让主机复位一次**（CP210x 的 DTR/RTS 接了 GPIO0/EN）。抓日志时一次打开、持续读，不要反复开关端口，否则会误判成“启动崩溃/重启循环”。
+
+### 13.5 凭据与文件系统边界
+
+| 数据 | 存放位置 | `uploadfs` 影响 | `upload` 影响 |
+|---|---|---|---|
+| Wi-Fi STA 账号密码（路由器/热点） | **NVS** | 不受影响 | 不受影响 |
+| `AP_PASSWORD`、`SLAVE_LINK_KEY` | 编译进固件（头文件） | — | 重新编译生效 |
+| `/calibration.JSON`（校准系数） | **SPIFFS** | **会被擦除** | 不受影响 |
+| 网页文件 | **SPIFFS** | 被整体替换 | 不受影响 |
+
+**结论**：只改固件 → 只 `upload`；只改网页 → 只 `uploadfs`（先备份 `calibration.JSON`）。
+
+### 13.6 当前唯一阻塞项
+
+泵不转的根因是 **3.3V 逻辑电平驱动不了 5V 高电平触发模块**，与 Wi-Fi 链路无关；换电平转换模块或换 3.3V 兼容驱动模块后，再执行 T3 命令一致性测试。
 
 ---
 
