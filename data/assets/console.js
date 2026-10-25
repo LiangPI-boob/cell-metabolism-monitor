@@ -1,0 +1,544 @@
+/* =====================================================================
+   控制台：实验流程 + 手动扫描 + 实时曲线
+   依赖：assets/app.js（唯一 WebSocket 连接）
+   消息来源：固件 expBroadcastState()/CTLPANEL 循环/sendVoltammogramWebsocketBIN()
+   ===================================================================== */
+(function () {
+  "use strict";
+
+  const $ = NS.$;
+  const $$ = NS.$$;
+
+  const EXP_STATE_LABEL = {
+    IDLE: "空闲",
+    CIRCULATE: "循环均质",
+    STOP_FLOW: "停流平衡",
+    MEASURE: "测量中",
+    CALIBRATE: "校准中",
+  };
+
+  const SWEEP_LABEL = {
+    CV: "CV 循环伏安",
+    NPV: "NPV 常规脉冲",
+    DPV: "DPV 差分脉冲",
+    SWV: "SWV 方波伏安",
+    CA: "CA 计时电流",
+    DC: "DC 直流偏置",
+    IV: "IV 曲线",
+    CAL: "Cal 校准",
+    MISC: "Misc 调试",
+  };
+
+  const state = {
+    live: { t0: 0, t: [], v: [], i: [] },
+    sweep: { t: [], v: [], i: [] },
+    binSeq: 0,
+    binAmps: null,
+    binVolts: null,
+    sweeping: false,
+    drawPending: false,
+  };
+
+  /* ---------- 图表（uPlot，随固件一起下发，离线可用） ---------- */
+  const hasChart = typeof window.uPlot !== "undefined";
+  const CHART_FONT =
+    '11px system-ui, -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif';
+
+  const charts = {
+    it: { el: null, plot: null },
+    iv: { el: null, plot: null },
+  };
+
+  const COMMON_OPTS = {
+    legend: { show: false },
+    cursor: { drag: { x: true, y: false } },
+    padding: [8, 8, 0, 0],
+    scales: {
+      x: { time: false, auto: true },
+      y: { auto: true },
+      v: { auto: true },
+    },
+  };
+
+  // side: 0 上 / 1 右 / 2 下 / 3 左
+  function axisOpts(label, scale, side) {
+    return {
+      label: label,
+      scale: scale,
+      side: side,
+      font: CHART_FONT,
+      labelFont: CHART_FONT,
+      labelSize: 20,
+      stroke: "#6b7280",
+      grid: { stroke: "#eef1f5", width: 1 },
+      ticks: { stroke: "#e4e8ee", width: 1, size: 5 },
+      gap: 6,
+    };
+  }
+
+  function seriesCurrent() {
+    return {
+      label: "电流 (µA)",
+      scale: "y",
+      stroke: "#2563eb",
+      width: 1.5,
+      points: { show: true, size: 4, width: 0, fill: "#2563eb" },
+      value: function (u, v) {
+        return v == null ? "--" : v.toFixed(3);
+      },
+    };
+  }
+
+  function seriesVoltage() {
+    return {
+      label: "电压 (mV)",
+      scale: "v",
+      stroke: "#d97706",
+      width: 1,
+      dash: [4, 3],
+      points: { show: false },
+      value: function (u, v) {
+        return v == null ? "--" : v.toFixed(0);
+      },
+    };
+  }
+
+  function plotOpts(kind) {
+    const opts = Object.assign({}, COMMON_OPTS);
+    if (kind === "iv") {
+      opts.series = [{}, seriesCurrent()];
+      opts.axes = [
+        axisOpts("电压 (mV)", "x", 2),
+        axisOpts("电流 (µA)", "y", 3),
+      ];
+    } else {
+      opts.series = [{}, seriesCurrent(), seriesVoltage()];
+      opts.axes = [
+        axisOpts("时间 (s)", "x", 2),
+        axisOpts("电流 (µA)", "y", 3),
+        axisOpts("电压 (mV)", "v", 1),
+      ];
+    }
+    return opts;
+  }
+
+  function nulls(n) {
+    const arr = new Array(n);
+    for (let i = 0; i < n; i++) arr[i] = null;
+    return arr;
+  }
+
+  function renderChart(kind, data) {
+    if (!hasChart) return;
+    const slot = charts[kind];
+    if (!slot.el) slot.el = document.getElementById("chart-" + kind);
+    if (!slot.el) return;
+
+    const width = slot.el.clientWidth;
+    const height = slot.el.clientHeight;
+    // Tab 隐藏时宽度为 0，跳过绘制；切回该 Tab 或窗口缩放时会重画
+    if (!width || !height) return;
+
+    if (!slot.plot) {
+      const opts = plotOpts(kind);
+      opts.width = width;
+      opts.height = height;
+      opts.series[1].points.show = data[0].length <= 300;
+      slot.plot = new uPlot(opts, data, slot.el);
+      return;
+    }
+
+    slot.plot.series[1].points.show = data[0].length <= 300;
+    if (slot.plot.width !== width || slot.plot.height !== height) {
+      slot.plot.setSize({ width: width, height: height });
+    }
+    slot.plot.setData(data);
+  }
+
+  function drawIV(volts, amps) {
+    renderChart("iv", [volts || [], amps || []]);
+  }
+
+  function drawIT(times, amps, volts) {
+    const t = times || [];
+    const v = volts && volts.length ? volts : nulls(t.length);
+    renderChart("it", [t, amps || [], v]);
+  }
+
+  function refreshCharts() {
+    if (state.sweep.t.length) {
+      drawIV(state.sweep.v, state.sweep.i);
+      drawIT(state.sweep.t, state.sweep.i, null);
+    } else if (state.live.t.length) {
+      drawIT(state.live.t, state.live.i, state.live.v);
+    }
+  }
+
+  /* ---------- 状态显示 ---------- */
+  function setBadge(el, text, kind) {
+    if (!el) return;
+    el.textContent = text;
+    el.className = "badge" + (kind ? " badge--" + kind : "");
+  }
+
+  function setDevice(dotId, stateId, on, onText, offText) {
+    const dot = document.getElementById(dotId);
+    const label = document.getElementById(stateId);
+    if (dot) dot.classList.toggle("is-on", !!on);
+    if (label) label.textContent = on ? onText : offText;
+  }
+
+  function formatDuration(ms) {
+    if (!ms || ms <= 0) return "--";
+    const total = Math.floor(ms / 1000);
+    const h = Math.floor(total / 3600);
+    const m = Math.floor((total % 3600) / 60);
+    const s = total % 60;
+    const pad = (n) => String(n).padStart(2, "0");
+    return h > 0 ? h + ":" + pad(m) + ":" + pad(s) : pad(m) + ":" + pad(s);
+  }
+
+  function showMsg(text, kind) {
+    const el = $("#exp-msg");
+    if (!el) return;
+    el.textContent = text || "";
+    el.className = "hint" + (kind ? " hint--" + kind : "") + (text ? "" : " hidden");
+  }
+
+  function syncInput(id, value) {
+    const el = document.getElementById(id);
+    if (!el || document.activeElement === el) return;
+    if (value !== undefined && String(el.value) !== String(value)) el.value = value;
+  }
+
+  function renderExpState(msg) {
+    const label = EXP_STATE_LABEL[msg.exp_state] || msg.exp_state || "--";
+    const stateEl = $("#exp-state");
+    if (stateEl) stateEl.textContent = label;
+    const cycleEl = $("#exp-cycle");
+    if (cycleEl) cycleEl.textContent = msg.exp_cycle === undefined ? "0" : msg.exp_cycle;
+    const calibEl = $("#calib-left");
+    if (calibEl) calibEl.textContent = formatDuration(msg.calib_in_ms);
+
+    setDevice("pump-dot", "pump-state", msg.pump_on, "运行", "停止");
+    setDevice("valve0-dot", "valve0-state", msg.valve0, "开启", "关闭");
+    setDevice("valve1-dot", "valve1-state", msg.valve1, "开启", "关闭");
+
+    const online = msg.slave_link === "online";
+    setBadge($("#slave-badge"), online ? "从机在线" : "从机离线", online ? "on" : "off");
+
+    syncInput("exp-circulate-min", msg.circulate_min);
+    syncInput("exp-stopflow-min", msg.stopflow_min);
+    syncInput("exp-calib-interval-h", msg.calib_interval_h);
+    syncInput("exp-calib-min", msg.calib_min);
+
+    const startBtn = $("#btn-start-exp");
+    const stopBtn = $("#btn-stop-exp");
+    if (startBtn) startBtn.disabled = msg.exp_state !== "IDLE" || !online;
+    if (stopBtn) stopBtn.disabled = msg.exp_state === "IDLE";
+  }
+
+  function renderRealtime(msg) {
+    if ("percentage" in msg) {
+      const el = $("#percentage");
+      if (el) el.textContent = msg.percentage + " %";
+    }
+    if ("dacVout" in msg) {
+      const el = $("#dac-vout");
+      if (el) el.textContent = NS.fmt(msg.dacVout, 0) + " mV";
+    }
+    if ("analog_read_avg_bits" in msg) {
+      const el = $("#adc-bits");
+      if (el) el.textContent = NS.fmt(msg.analog_read_avg_bits, 1);
+    }
+    if ("analog_read_avg_mV" in msg) {
+      const el = $("#adc-mv");
+      if (el) el.textContent = NS.fmt(msg.analog_read_avg_mV, 2) + " mV";
+    }
+
+    if (!("amps" in msg) || !("time" in msg)) return;
+
+    if (!state.live.t0) state.live.t0 = Number(msg.time);
+    state.live.t.push((Number(msg.time) - state.live.t0) / 1000);
+    state.live.i.push(Number(msg.amps));
+    state.live.v.push(Number(msg.volts));
+
+    trimLive();
+    updateStats();
+    scheduleLiveDraw();
+  }
+
+  function maxPoints() {
+    const el = $("#max-points");
+    const v = el ? parseInt(el.value, 10) : 100;
+    return isFinite(v) && v > 0 ? v : 100;
+  }
+
+  function trimLive() {
+    const limit = maxPoints();
+    ["t", "v", "i"].forEach((key) => {
+      const arr = state.live[key];
+      if (arr.length > limit) arr.splice(0, arr.length - limit);
+      if (key === "t" && arr.length === 0) state.live.t0 = 0;
+    });
+  }
+
+  function updateStats() {
+    const arr = state.live.i;
+    if (!arr.length) return;
+    let sum = 0;
+    for (let i = 0; i < arr.length; i++) sum += arr[i];
+    const avg = sum / arr.length;
+    let sq = 0;
+    for (let i = 0; i < arr.length; i++) sq += (arr[i] - avg) * (arr[i] - avg);
+
+    const avgEl = $("#avg-current");
+    if (avgEl) avgEl.textContent = NS.fmt(avg, 3) + " µA";
+    const stdEl = $("#std-current");
+    if (stdEl) stdEl.textContent = NS.fmt(Math.sqrt(sq / arr.length), 3) + " µA";
+    const countEl = $("#point-count");
+    if (countEl) countEl.textContent = String(arr.length);
+  }
+
+  function scheduleLiveDraw() {
+    if (state.drawPending) return;
+    state.drawPending = true;
+    setTimeout(function () {
+      state.drawPending = false;
+      drawIT(state.live.t, state.live.i, state.live.v);
+    }, 250);
+  }
+
+  /* ---------- 扫描结果 ---------- */
+  function applySweepResult(times, volts, amps) {
+    state.sweep.t = times;
+    state.sweep.v = volts;
+    state.sweep.i = amps;
+    drawIV(volts, amps);
+    drawIT(times, amps, null);
+    const countEl = $("#point-count");
+    if (countEl) countEl.textContent = String(amps.length);
+    showMsg("扫描完成，共 " + amps.length + " 个点，可保存或下载数据。");
+
+    const ivTab = document.querySelector('[data-tab="iv"]');
+    if (ivTab) ivTab.click();
+  }
+
+  function handleBinary(buffer) {
+    state.binSeq += 1;
+    if (state.binSeq === 1) {
+      state.binAmps = Array.from(new Float32Array(buffer));
+      return;
+    }
+    if (state.binSeq === 2) {
+      state.binVolts = Array.from(new Int16Array(buffer));
+      return;
+    }
+    const times = Array.from(new Int32Array(buffer)).map((ms) => ms / 1000);
+    if (state.binAmps && state.binVolts) {
+      applySweepResult(times, state.binVolts, state.binAmps);
+    }
+    state.binSeq = 0;
+    state.binAmps = null;
+    state.binVolts = null;
+  }
+
+  /* ---------- 绑定 ---------- */
+  function bindSweepButtons() {
+    $$("[data-sweep]").forEach((btn) => {
+      btn.addEventListener("click", async function () {
+        const endpoint = btn.dataset.endpoint;
+        btn.disabled = true;
+        try {
+          const response = await fetch("/" + endpoint, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ on: true }),
+          });
+          if (!response.ok) throw new Error("HTTP " + response.status);
+          showMsg("已触发 " + (SWEEP_LABEL[btn.dataset.mode] || btn.dataset.mode) + " 扫描。");
+        } catch (err) {
+          showMsg("触发扫描失败：" + err.message, "danger");
+        } finally {
+          setTimeout(function () {
+            btn.disabled = false;
+          }, 800);
+        }
+      });
+    });
+  }
+
+  function bindRuntimeParams() {
+    const gain = $("#lmp-gain");
+    if (gain) {
+      gain.addEventListener("change", function () {
+        NS.send({ change_lmpGain_to: Number(gain.value) });
+      });
+    }
+
+    const voltage = $("#cell-voltage");
+    if (voltage) {
+      voltage.addEventListener("change", function () {
+        NS.send({ change_cell_voltage_to: Number(voltage.value) });
+      });
+    }
+
+    const readings = $("#num-readings");
+    if (readings) {
+      readings.addEventListener("change", function () {
+        NS.send({ change_num_readings_to_average_per_point_to: Number(readings.value) });
+      });
+    }
+
+    const delay = $("#delay-ms");
+    if (delay) {
+      delay.addEventListener("change", function () {
+        NS.send({ change_delay_between_points_ms_to: Number(delay.value) });
+      });
+    }
+
+    const maxEl = $("#max-points");
+    if (maxEl) {
+      maxEl.addEventListener("change", function () {
+        trimLive();
+        updateStats();
+      });
+    }
+
+    $$('[name="monitor-active"]').forEach((radio) => {
+      radio.addEventListener("change", function () {
+        if (!radio.checked) return;
+        const active = radio.value === "true";
+        if (active) {
+          if (gain) NS.send({ change_lmpGain_to: Number(gain.value) });
+          if (voltage) NS.send({ change_cell_voltage_to: Number(voltage.value) });
+          if (readings) {
+            NS.send({ change_num_readings_to_average_per_point_to: Number(readings.value) });
+          }
+          if (delay) NS.send({ change_delay_between_points_ms_to: Number(delay.value) });
+        }
+        NS.send({ change_control_panel_is_active_to: active });
+        showMsg(active ? "实时监测已启用。" : "实时监测已停用。");
+      });
+    });
+  }
+
+  function bindExpControls() {
+    const startBtn = $("#btn-start-exp");
+    if (startBtn) {
+      startBtn.addEventListener("click", function () {
+        if (NS.send({ start_experiment: true })) {
+          showMsg("启动指令已发送，等待从机响应。");
+        } else {
+          showMsg("WebSocket 未连接，无法启动实验。", "danger");
+        }
+      });
+    }
+
+    const stopBtn = $("#btn-stop-exp");
+    if (stopBtn) {
+      stopBtn.addEventListener("click", function () {
+        NS.send({ stop_experiment: true });
+        showMsg("停止指令已发送。");
+      });
+    }
+
+    const map = {
+      "exp-circulate-min": "change_exp_circulate_min",
+      "exp-stopflow-min": "change_exp_stopflow_min",
+      "exp-calib-interval-h": "change_exp_calib_interval_h",
+      "exp-calib-min": "change_exp_calib_min",
+    };
+    Object.keys(map).forEach((id) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.addEventListener("change", function () {
+        const payload = {};
+        payload[map[id]] = Number(el.value);
+        NS.send(payload);
+      });
+    });
+  }
+
+  function bindDataActions() {
+    const saveBtn = $("#btn-save");
+    if (saveBtn) {
+      saveBtn.addEventListener("click", function () {
+        const source = state.sweep.t.length ? state.sweep : state.live;
+        if (!source.t.length) {
+          showMsg("暂无数据可保存。", "warn");
+          return;
+        }
+        const lines = ["Time(s),Current(uA),Voltage(mV)"];
+        for (let i = 0; i < source.t.length; i++) {
+          lines.push([NS.fmt(source.t[i], 3), NS.fmt(source.i[i], 4), NS.fmt(source.v[i], 1)].join(","));
+        }
+        NS.downloadText(lines.join("\n"), "nanostat-data.csv");
+      });
+    }
+  }
+
+  function bindTabs() {
+    NS.$$("[data-tabs]").forEach(function (group) {
+      group.addEventListener("tab:change", function () {
+        // 等浏览器完成布局，拿到新面板的真实宽度后再画
+        setTimeout(refreshCharts, 30);
+      });
+    });
+
+    let timer = null;
+    window.addEventListener("resize", function () {
+      clearTimeout(timer);
+      timer = setTimeout(refreshCharts, 150);
+    });
+  }
+
+  /* ---------- 启动 ---------- */
+  document.addEventListener("DOMContentLoaded", function () {
+    if (!hasChart) {
+      const hint = $("#chart-fallback");
+      if (hint) hint.classList.remove("hidden");
+    }
+
+    bindSweepButtons();
+    bindRuntimeParams();
+    bindExpControls();
+    bindDataActions();
+    bindTabs();
+
+    NS.on("json", function (msg) {
+      if ("exp_state" in msg) {
+        renderExpState(msg);
+        return;
+      }
+      if ("is_sweeping" in msg) {
+        state.sweeping = !!msg.is_sweeping;
+        setBadge($("#mode-badge"), msg.is_sweeping ? "扫描中" : "空闲", msg.is_sweeping ? "busy" : "");
+        if (msg.is_sweeping) showMsg("正在扫描…");
+        return;
+      }
+      if ("expect_binary_data" in msg) {
+        state.binSeq = 0;
+        state.binAmps = null;
+        state.binVolts = null;
+        return;
+      }
+      if ("Voltage" in msg && "Current" in msg) {
+        const times = (msg.Time || []).map((ms) => ms / 1000);
+        applySweepResult(times, msg.Voltage, msg.Current);
+        return;
+      }
+      if ("exp_error" in msg) {
+        const text = msg.exp_error === "slave_offline" ? "从机离线，无法启动实验。" : "实验异常：" + msg.exp_error;
+        showMsg(text, "danger");
+        return;
+      }
+      renderRealtime(msg);
+    });
+
+    NS.on("bin", handleBinary);
+    NS.on("close", function () {
+      setBadge($("#slave-badge"), "从机离线", "off");
+    });
+  });
+})();

@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NanoStat · 系统</title>
+  <link rel="stylesheet" href="assets/app.css">
+</head>
+
+<body data-page="system">
+  <nav class="nav">
+    <span class="nav__brand">NanoStat</span>
+    <a class="nav__link" href="index.html">控制台</a>
+    <a class="nav__link" href="setup.html">参数</a>
+    <a class="nav__link is-active" href="system.html">系统</a>
+    <a class="nav__link" href="help.html">帮助</a>
+  </nav>
+
+  <main class="page">
+    <header class="page__head">
+      <h1>系统</h1>
+      <p class="page__sub">文件、WiFi、固件与重启</p>
+    </header>
+
+    <div data-tabs>
+      <div class="tabs">
+        <button class="tabs__btn is-active" data-tab="files">文件</button>
+        <button class="tabs__btn" data-tab="wifi">WiFi</button>
+        <button class="tabs__btn" data-tab="firmware">固件</button>
+        <button class="tabs__btn" data-tab="reboot">重启</button>
+      </div>
+
+      <!-- ============ 文件 ============ -->
+      <div class="tabs__panel is-active" data-panel="files">
+        <section class="card">
+          <div class="card__head">
+            <h2>上传文件</h2>
+            <span class="card__sub">写入 SPIFFS 根目录</span>
+          </div>
+          <form action="/m_fupload" method="POST" enctype="multipart/form-data">
+            <div class="field">
+              <label class="field__label" for="upload-file">选择文件</label>
+              <input type="file" id="upload-file" name="m_fupload">
+            </div>
+            <div class="form-actions">
+              <button type="submit" class="btn btn--primary">上传</button>
+            </div>
+          </form>
+        </section>
+
+        <section class="card mt-16">
+          <div class="card__head">
+            <h2>目录</h2>
+            <button class="btn btn--sm" id="btn-refresh-files">刷新</button>
+          </div>
+          <div class="list" id="file-list">
+            <div class="list__item"><span class="muted">加载中…</span></div>
+          </div>
+        </section>
+      </div>
+
+      <!-- ============ WiFi ============ -->
+      <div class="tabs__panel" data-panel="wifi">
+        <section class="card">
+          <div class="card__head">
+            <h2>WiFi 凭据</h2>
+            <span class="card__sub">最多保存 3 组，按顺序尝试连接</span>
+          </div>
+          <form action="/saveSecret" method="POST">
+            <div class="grid--3">
+              <div class="field">
+                <label class="field__label" for="ssid1">SSID 1</label>
+                <input type="text" id="ssid1" name="ssid1" maxlength="32">
+              </div>
+              <div class="field">
+                <label class="field__label" for="pass1">Password 1</label>
+                <input type="text" id="pass1" name="pass1" maxlength="32">
+              </div>
+              <div class="field">
+                <label class="field__label" for="ssid2">SSID 2</label>
+                <input type="text" id="ssid2" name="ssid2" maxlength="32">
+              </div>
+              <div class="field">
+                <label class="field__label" for="pass2">Password 2</label>
+                <input type="text" id="pass2" name="pass2" maxlength="32">
+              </div>
+              <div class="field">
+                <label class="field__label" for="ssid3">SSID 3</label>
+                <input type="text" id="ssid3" name="ssid3" maxlength="32">
+              </div>
+              <div class="field">
+                <label class="field__label" for="pass3">Password 3</label>
+                <input type="text" id="pass3" name="pass3" maxlength="32">
+              </div>
+            </div>
+            <div class="form-actions">
+              <button type="reset" class="btn btn--ghost">清空</button>
+              <button type="submit" class="btn btn--primary">保存</button>
+            </div>
+          </form>
+        </section>
+
+        <section class="card mt-16">
+          <div class="card__head">
+            <h2>附近网络</h2>
+            <button class="btn btn--sm" id="btn-scan">扫描</button>
+          </div>
+          <p class="card__sub mb-12">首次点击会触发扫描，列表在几秒内自动刷新；点击网络名可填入空白的 SSID。</p>
+          <div class="list" id="wifi-list">
+            <div class="list__item"><span class="muted">尚未扫描</span></div>
+          </div>
+        </section>
+      </div>
+
+      <!-- ============ 固件 ============ -->
+      <div class="tabs__panel" data-panel="firmware">
+        <section class="card">
+          <div class="card__head">
+            <h2>固件更新</h2>
+            <span class="card__sub">上传 firmware.bin 后自动重启</span>
+          </div>
+          <form action="/m_firmware_update" method="POST" enctype="multipart/form-data">
+            <div class="field">
+              <label class="field__label" for="fw-file">固件文件</label>
+              <input type="file" id="fw-file" name="m_fupload" accept=".bin">
+            </div>
+            <div class="form-actions">
+              <button type="submit" class="btn btn--danger">上传并更新固件</button>
+            </div>
+          </form>
+        </section>
+
+        <section class="card mt-16">
+          <div class="card__head">
+            <h2>文件系统更新</h2>
+            <span class="card__sub">上传 spiffs.bin 后自动重启</span>
+          </div>
+          <form action="/m_filesystem_update" method="POST" enctype="multipart/form-data">
+            <div class="field">
+              <label class="field__label" for="fs-file">文件系统镜像</label>
+              <input type="file" id="fs-file" name="m_filesystemupload" accept=".bin">
+            </div>
+            <div class="form-actions">
+              <button type="submit" class="btn btn--danger">上传并更新文件系统</button>
+            </div>
+          </form>
+          <p class="hint hint--warn mt-12">烧写过程中不要断电，也不要关闭页面。</p>
+        </section>
+      </div>
+
+      <!-- ============ 重启 ============ -->
+      <div class="tabs__panel" data-panel="reboot">
+        <section class="card">
+          <div class="card__head">
+            <h2>重启设备</h2>
+            <span class="card__sub">配置或固件更新后使用</span>
+          </div>
+          <p class="card__sub mb-12">重启将中断正在进行的扫描与实验，请先停止实验。</p>
+          <button class="btn btn--danger" id="btn-reboot">立即重启</button>
+        </section>
+      </div>
+    </div>
+  </main>
+
+  <footer class="foot">NanoStat Firmware Rev. 1.0 · BurkeLab</footer>
+
+  <script src="assets/app.js"></script>
+  <script src="assets/system.js"></script>
+</body>
+
+</html>

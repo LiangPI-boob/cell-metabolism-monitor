@@ -11,7 +11,20 @@ bool print_output_to_serial = true; // prints verbose output to serial
 #include <ESPmDNS.h>
 #include <SPIFFS.h>
 #include <AsyncJson.h>
+// 凭据来自不入库的 wifi_credentials.h（由 wifi_credentials.example.h 复制）。
+#if __has_include("wifi_credentials.h")
 #include "wifi_credentials.h"
+#else
+#error "缺少 wifi_credentials.h：请复制 src/wifi_credentials.example.h 为 src/wifi_credentials.h 并填写"
+#endif
+
+#ifndef AP_PASSWORD
+#error "缺少 AP_PASSWORD：请在 src/wifi_credentials.h 中定义（至少 8 位）"
+#endif
+#ifndef SLAVE_LINK_KEY
+#error "缺少 SLAVE_LINK_KEY：请在 src/wifi_credentials.h 中定义（须与从机 wifi_secrets.h 一致）"
+#endif
+
 #include "LMP91000.h"
 #include "WebSocketsServer.h"
 #include "DNSServer.h"
@@ -41,15 +54,19 @@ int LEDPIN = 26;
 
 // ============================================================
 //  新增：从机（流体控制板）通信 + 实验调度
-//  主机 <-> 从机：UART2（GPIO32 = RX, GPIO33 = TX），115200
+//  主机 <-> 从机：Wi-Fi / TCP，主机 AP 侧 192.168.4.1:3333
+//  （从机作为 TCP Client 主动连接，应用层仍是单行 JSON 协议）
 // ============================================================
-#define PIN_SLAVE_RX 32
-#define PIN_SLAVE_TX 33
+
+// 从机链路 TCP Server（AP 常开，STA 可选）
+WiFiServer g_slaveServer(3333);
+WiFiClient g_slaveClient;
 
 void slaveLoop();          // 收从机的响应 / 事件
 void serviceExperiment();  // 实验调度状态机
 void expStart();           // 启动实验
 void expStop();            // 停止实验
+void expBroadcastState();  // 向网页广播实验/链路状态
 
 // 实验参数（定义在文件后部的调度模块）
 extern uint32_t exp_param_circulate_ms;
@@ -973,8 +990,8 @@ bool readSSIDPWDfile(String m_pwd_filename_to_read)
   String m_SSID2_name = m_JSONdoc_from_pwd_file["SSID2"];
   String m_SSID3_name = m_JSONdoc_from_pwd_file["SSID3"];
   String m_PWD1_name = m_JSONdoc_from_pwd_file["PWD1"];
-  String m_PWD2_name = m_JSONdoc_from_pwd_file["PWD1"];
-  String m_PWD3_name = m_JSONdoc_from_pwd_file["PWD1"];
+  String m_PWD2_name = m_JSONdoc_from_pwd_file["PWD2"];
+  String m_PWD3_name = m_JSONdoc_from_pwd_file["PWD3"];
   // Serial.print("m_SSID1_name = ");
   // Serial.print(m_SSID1_name);
   // Serial.print(F("\t")); // tab
@@ -1020,10 +1037,17 @@ void setUpAPService()
 
   // DNSServer dnsServer;
   // dnsServer.reset(new DNSServer());
-  WiFi.mode(WIFI_AP);
+  // APSTA：SoftAP 常开供从机连接；已连上的 STA（路由器）不会被关闭
+  WiFi.mode(WIFI_AP_STA);
   // WiFi.softAPConfig(IPAddress(172, 217, 28, 1), IPAddress(172, 217, 28, 1), IPAddress(255, 255, 255, 0));
-  WiFi.softAP("NanoStatAP");
+  WiFi.softAP("NanoStatAP", AP_PASSWORD, 0, 0, 4);
   delay(500);
+
+  // 从机链路 TCP Server（从机作为 Client 连接）
+  g_slaveServer.begin();
+
+  Serial.print(F("[AP] NanoStatAP IP: "));
+  Serial.println(WiFi.softAPIP());
 
   /* Setup the DNS server redirecting all the domains to the apIP */
   // dnsServer->setErrorReplyCode(DNSReplyCode::NoError);
@@ -1293,7 +1317,7 @@ void handleGetSavSecreteJsonNoReboot(AsyncWebServerRequest *request)
   }
   m_ssid_pwd_file_to_write_name.close();
 
-  request->send(200, "text/html", "  <head> <meta http-equiv=\"refresh\" content=\"2; URL=wifi.html\" /> <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\"> </head> <body> <h1> Credentials stored to flash on NanoStat. </h1>  </body>");
+  request->send(200, "text/html", "  <head> <meta http-equiv=\"refresh\" content=\"2; URL=system.html#wifi\" /> <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\"> </head> <body> <h1> Credentials stored to flash on NanoStat. </h1>  </body>");
   restartSystem = millis();
 }
 
@@ -1343,7 +1367,8 @@ void handleUpload(AsyncWebServerRequest *request, String filename, String redire
   Serial.println("handleUpload called");
   Serial.println(filename);
   Serial.println(redirect);
-  File fsUploadFile;
+  // 上传句柄必须跨分片保留：ESPAsyncWebServer 会多次调用本回调
+  static File fsUploadFile;
   if (!index)
   {
     if (!filename.startsWith("/"))
@@ -1361,7 +1386,7 @@ void handleUpload(AsyncWebServerRequest *request, String filename, String redire
     Serial.println((String) "UploadEnd: " + filename);
     fsUploadFile.close();
 
-    request->send(200, "text/HTML", "  <head> <meta http-equiv=\"refresh\" content=\"2; URL=files.html\" /> <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\"> </head> <body> <h1> File uploaded! </h1> <p> Returning to file page. </p> </body>");
+    request->send(200, "text/HTML", "  <head> <meta http-equiv=\"refresh\" content=\"2; URL=system.html#files\" /> <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\"> </head> <body> <h1> File uploaded! </h1> <p> Returning to file page. </p> </body>");
 
     // request->redirect(redirect);
   }
@@ -3699,7 +3724,8 @@ void handle_websocket_text(uint8_t *payload)
     if (m_key_string == "change_exp_circulate_min")
     {
       int v = m_JSONdoc_from_payload["change_exp_circulate_min"];
-      if (v >= 1 && v <= 1440) exp_param_circulate_ms = (uint32_t)v * 60000UL;
+      // 从机泵单次上限 1 h：59 min + 60 s 余量 = 3,600,000 ms
+      if (v >= 1 && v <= 59) exp_param_circulate_ms = (uint32_t)v * 60000UL;
     }
     if (m_key_string == "change_exp_stopflow_min")
     {
@@ -3747,6 +3773,8 @@ void onWebSocketEvent(uint8_t num,
     IPAddress ip = m_websocketserver.remoteIP(num);
     Serial.printf("[%u] Connection from ", num);
     Serial.println(ip.toString());
+    // 新网页立即拿到实验/从机链路状态
+    expBroadcastState();
   }
   break;
 
@@ -3949,6 +3977,26 @@ void configureserver()
                                                       request10->send(200, "OK");
                                                     }));
 
+  // 网络状态：网页据此区分「热点直连」与「路由器」两种访问方式并给出提示
+  server.on("/netinfo", HTTP_GET, [](AsyncWebServerRequest *request)
+            {
+              bool staUp = (WiFi.status() == WL_CONNECTED);
+              String json = "{\"ap_ssid\":\"NanoStatAP\",\"ap_ip\":\"";
+              json += WiFi.softAPIP().toString();
+              json += "\",\"ap_clients\":";
+              json += String(WiFi.softAPgetStationNum());
+              json += ",\"sta_connected\":";
+              json += staUp ? "true" : "false";
+              json += ",\"sta_ssid\":\"";
+              json += staUp ? WiFi.SSID() : String("");
+              json += "\",\"sta_ip\":\"";
+              json += staUp ? WiFi.localIP().toString() : String("");
+              json += "\",\"sta_rssi\":";
+              json += String(staUp ? WiFi.RSSI() : 0);
+              json += ",\"mdns\":\"nanostat.local\"}";
+              request->send(200, "application/json", json);
+            });
+
   server.serveStatic("/", SPIFFS, "/").setDefaultFile("index.html");
 
   server.on("/downloadfile", HTTP_GET, [](AsyncWebServerRequest *request)
@@ -4056,7 +4104,7 @@ void configureserver()
       "/m_fupload", HTTP_POST, [](AsyncWebServerRequest *request) {},
       [](AsyncWebServerRequest *request, const String &filename, size_t index, uint8_t *data,
          size_t len, bool final)
-      { handleUpload(request, filename, "files.html", index, data, len, final); });
+      { handleUpload(request, filename, "system.html#files", index, data, len, final); });
 
   // From https://github.com/me-no-dev/ESPAsyncWebServer/issues/542#issuecomment-573445113
   // handling uploading firmware file
@@ -4118,9 +4166,7 @@ void setup()
     ;
   Serial.println("BOOT: serial ok");
 
-  // ===== 新增：启动与从机（流体控制板）的 UART2 通信 =====
-  Serial2.begin(115200, SERIAL_8N1, PIN_SLAVE_RX, PIN_SLAVE_TX);
-  Serial.println("[SLAVE] UART2 ready: RX=32 TX=33");
+  // 从机链路走 Wi-Fi / TCP，不再使用 Serial2（主机无 UART 排针）
 
   Serial.println("Welcome to NanoStat, Firmware Rev. 1.0!");
 
@@ -4172,12 +4218,16 @@ void setup()
     String m_filenametopass = "/credentials.JSON";
     m_autoconnected_attempt_succeeded = readSSIDPWDfile(m_filenametopass);
   }
-  if (!m_autoconnected_attempt_succeeded)
+  // 无论 STA 是否连上路由器，都开启 SoftAP（NanoStatAP）+ TCP Server，
+  // 保证从机链路可用；STA 失败不会关闭 AP
+  setUpAPService();
+  if (m_autoconnected_attempt_succeeded)
   {
-    // 没有可用 WiFi 时开热点；不再进入阻塞的配置门户，
-    // 继续启动主 Web 服务器 + WebSocket，保证面板可用
-    setUpAPService();
-    Serial.println("BOOT: AP mode (NanoStatAP), skip blocking portal");
+    Serial.println("BOOT: AP+STA mode (NanoStatAP)");
+  }
+  else
+  {
+    Serial.println("BOOT: AP mode only (NanoStatAP), skip blocking portal");
   }
 
   // connectAttempt(SSID,PASSWORD); // uses SSID/PWD stored in ESP32 secret memory.....
@@ -4217,6 +4267,8 @@ void setup()
 
   // SPIFFS.remove("/calibration.JSON"); // manual delete to test code.
   readCalFile();
+
+  Serial.println("[SLAVE] TCP server on 192.168.4.1:3333");
 
   //############################# BLINK LED TO SHOW SETUP COMPLETE #####################################
   Serial.print("Heap free memory (in bytes)= ");
@@ -4404,68 +4456,154 @@ void loop()
  *  新增模块：从机（流体控制板）通信 + 实验调度
  * ================================================================= */
 
-/* ---------------- 从机串口 ---------------- */
-String   g_slaveRxBuf     = "";
-uint32_t g_slaveLastMsgMs = 0;
-bool     g_slaveOnline    = false;
-bool     g_slavePumpOn    = false;
-bool     g_slaveValve0    = false;
-bool     g_slaveValve1    = false;
+/* ---------------- 从机链路（Wi-Fi / TCP） ---------------- */
+String   g_slaveRxBuf      = "";
+uint32_t g_slaveLastMsgMs  = 0;
+uint32_t g_slaveLastPingMs = 0;
+uint32_t g_slaveConnectMs  = 0;
+bool     g_slaveOnline     = false;
+bool     g_slavePumpOn     = false;
+bool     g_slaveValve0     = false;
+bool     g_slaveValve1     = false;
 
-// 发一行 JSON 给从机
+// 发一行 JSON 给从机；未连接时直接丢弃，绝不阻塞
 void slaveSend(const String& json)
 {
-  Serial2.println(json);
-  Serial.print("[TO SLAVE] ");
-  Serial.println(json);
+  if (g_slaveClient && g_slaveClient.connected())
+  {
+    g_slaveClient.println(json);
+    Serial.print("[TO SLAVE] ");
+    Serial.println(json);
+  }
+  else
+  {
+    Serial.print("[SLAVE OFFLINE] ");
+    Serial.println(json);
+  }
 }
 
-// 收从机发来的响应 / 事件
+// 收从机发来的响应 / 事件（TCP Server 轮询 + 按行解析）
 void slaveLoop()
 {
-  while (Serial2.available())
+  // ① 接受新连接：同一时刻只保留一个从机
+  WiFiClient m_newClient = g_slaveServer.available();
+  if (m_newClient)
   {
-    char c = (char)Serial2.read();
-    if (c == '\n')
+    if (g_slaveClient && g_slaveClient.connected())
     {
-      g_slaveRxBuf.trim();
-      if (g_slaveRxBuf.length() > 0)
-      {
-        g_slaveOnline    = true;
-        g_slaveLastMsgMs = millis();
-        Serial.print("[FROM SLAVE] ");
-        Serial.println(g_slaveRxBuf);
-
-        // 解析从机状态，供网页显示泵/阀实时状态
-        {
-          StaticJsonDocument<512> m_slaveDoc;
-          if (deserializeJson(m_slaveDoc, g_slaveRxBuf) == DeserializationError::Ok)
-          {
-            if (m_slaveDoc.containsKey("pump0"))
-              g_slavePumpOn = m_slaveDoc["pump0"]["on"] | false;
-            if (m_slaveDoc.containsKey("valves"))
-            {
-              JsonArray m_vs = m_slaveDoc["valves"].as<JsonArray>();
-              int m_i = 0;
-              for (JsonObject m_v : m_vs)
-              {
-                if (m_i == 0) g_slaveValve0 = m_v["open"] | false;
-                if (m_i == 1) g_slaveValve1 = m_v["open"] | false;
-                m_i++;
-              }
-            }
-          }
-        }
-
-        // 转发给网页，方便在浏览器里看到从机状态
-        m_websocketserver.broadcastTXT(g_slaveRxBuf.c_str(), g_slaveRxBuf.length());
-      }
-      g_slaveRxBuf = "";
+      Serial.println("[SLAVE] extra client rejected");
+      m_newClient.stop();
     }
-    else if (c != '\r')
+    else
+    {
+      g_slaveClient = m_newClient;
+      g_slaveClient.setNoDelay(true);
+      g_slaveRxBuf = "";
+      g_slaveRxBuf.reserve(512);
+      g_slaveConnectMs = millis();
+      Serial.print("[SLAVE] client connected from ");
+      Serial.println(g_slaveClient.remoteIP());
+    }
+  }
+
+  // ② 按行读取：\r 忽略，\n 触发解析，单行上限 512 B
+  while (g_slaveClient && g_slaveClient.connected() && g_slaveClient.available() > 0)
+  {
+    char c = (char)g_slaveClient.read();
+    if (c == '\r') continue;
+    if (c != '\n')
     {
       if (g_slaveRxBuf.length() < 512) g_slaveRxBuf += c;
+      continue;
     }
+
+    String m_line = g_slaveRxBuf;
+    g_slaveRxBuf = "";
+    if (m_line.length() == 0) continue;
+
+    StaticJsonDocument<512> m_slaveDoc;
+    if (deserializeJson(m_slaveDoc, m_line) != DeserializationError::Ok)
+    {
+      Serial.println("[SLAVE] bad json, dropped");
+      continue;
+    }
+
+    String m_evt = m_slaveDoc["evt"] | "";
+
+    // 握手：校验 key，hello 行绝不转发给网页
+    if (m_evt == "hello")
+    {
+      String m_key = m_slaveDoc["key"] | "";
+      if (m_key != SLAVE_LINK_KEY)
+      {
+        Serial.println("[SLAVE] hello rejected");
+        g_slaveOnline = false;
+        g_slaveClient.stop();
+        g_slaveRxBuf = "";
+        expBroadcastState();
+        break;
+      }
+      g_slaveOnline     = true;
+      g_slaveLastMsgMs  = millis();
+      g_slaveLastPingMs = millis();
+      Serial.print("[SLAVE] hello ok fw=");
+      Serial.println((const char*)(m_slaveDoc["fw"] | "?"));
+      slaveSend("{\"id\":0,\"cmd\":\"status\"}");
+      expBroadcastState();
+      continue;
+    }
+
+    // 未通过 hello 的消息一律不认、不转发
+    if (!g_slaveOnline) continue;
+
+    g_slaveLastMsgMs = millis();
+    Serial.print("[FROM SLAVE] ");
+    Serial.println(m_line);
+
+    // 解析从机状态，供网页显示泵/阀实时状态
+    if (m_slaveDoc.containsKey("pump0"))
+      g_slavePumpOn = m_slaveDoc["pump0"]["on"] | false;
+    if (m_slaveDoc.containsKey("valves"))
+    {
+      JsonArray m_vs = m_slaveDoc["valves"].as<JsonArray>();
+      int m_i = 0;
+      for (JsonObject m_v : m_vs)
+      {
+        if (m_i == 0) g_slaveValve0 = m_v["open"] | false;
+        if (m_i == 1) g_slaveValve1 = m_v["open"] | false;
+        m_i++;
+      }
+    }
+
+    // 转发给网页，方便在浏览器里看到从机状态
+    m_websocketserver.broadcastTXT(m_line.c_str(), m_line.length());
+  }
+
+  // ③ 连接后迟迟不 hello：10 s 后断开，避免占住唯一连接位
+  if (!g_slaveOnline && g_slaveClient && g_slaveClient.connected() &&
+      (millis() - g_slaveConnectMs > 10000UL))
+  {
+    Serial.println("[SLAVE] handshake timeout");
+    g_slaveClient.stop();
+    g_slaveRxBuf = "";
+  }
+
+  // ④ 心跳：5 s 一次，IDLE 也发（从机无心跳会自动停泵）
+  if (g_slaveOnline && (millis() - g_slaveLastPingMs >= 5000UL))
+  {
+    g_slaveLastPingMs = millis();
+    slaveSend("{\"cmd\":\"ping\"}");
+  }
+
+  // ⑤ 离线判定：先读完数据再判，避免主机静测阻塞后误判
+  if (g_slaveOnline && (!g_slaveClient.connected() ||
+                        (millis() - g_slaveLastMsgMs > 20000UL)))
+  {
+    g_slaveOnline = false;
+    g_slaveClient.stop();
+    g_slaveRxBuf = "";
+    Serial.println("[SLAVE] link lost");
+    expBroadcastState();
   }
 }
 
@@ -4530,22 +4668,34 @@ void expBroadcastState()
   s += String(exp_param_calib_interval_ms / 3600000UL);
   s += ",\"calib_min\":";
   s += String(exp_param_calib_ms / 60000UL);
+  s += ",\"slave_link\":\"";
+  s += (g_slaveOnline ? "online" : "offline");
+  s += "\"";
   s += "}";
   m_websocketserver.broadcastTXT(s.c_str(), s.length());
   Serial.print("[EXP] ");
   Serial.println(s);
 }
 
-// 让循环泵开始工作（ms=0 表示常开，由调度状态机负责停）
+// 让循环泵开始工作：单次时长 = 循环均质时长 + 60 s 余量，由调度状态机负责停
 void expPumpRun()
 {
+  uint32_t m_ms = exp_param_circulate_ms + 60000UL;
   slaveSend("{\"id\":" + String(g_expCmdId++) +
-            ",\"cmd\":\"pump\",\"ch\":0,\"speed\":50,\"ms\":0}");
+            ",\"cmd\":\"pump\",\"ch\":0,\"speed\":50,\"ms\":" + String(m_ms) + "}");
 }
 
 // 启动实验
 void expStart()
 {
+  // 从机离线时拒绝启动，避免实验空转
+  if (!g_slaveOnline)
+  {
+    m_websocketserver.broadcastTXT("{\"exp_error\":\"slave_offline\"}");
+    Serial.println("[EXP] start rejected: slave offline");
+    return;
+  }
+
   g_expCycleIdx    = 0;
   g_expLastCalibMs = millis();
   g_expLastPingMs  = millis();
@@ -4586,13 +4736,6 @@ void serviceExperiment()
 {
   if (g_expState == EXP_IDLE) return;
   uint32_t now = millis();
-
-  // 实验期间定期发心跳，避免从机 120 秒心跳超时后自动停泵
-  if (now - g_expLastPingMs >= 30000UL)
-  {
-    g_expLastPingMs = now;
-    slaveSend("{\"id\":" + String(g_expCmdId++) + ",\"cmd\":\"ping\"}");
-  }
 
   // 每 5 秒查询一次从机状态（泵/阀实际状态）
   if (now - g_expLastStatusMs >= 5000UL)

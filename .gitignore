@@ -9,6 +9,7 @@
 
 # 密钥与 WiFi 配置（不要传到公开仓库）
 src/wifi_credentials.h
+slave/slave_firmware/wifi_secrets.h
 data/secrets.json
 
 # 编译产物

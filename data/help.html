@@ -1,179 +1,137 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-CN">
 
 <head>
   <meta charset="UTF-8">
-  <meta http-equiv="X-UA-Compatible" content="IE=edge">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>NanoStat
-  </title>
-  <!-- Bootstrap CSS -->
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.0-beta3/dist/css/bootstrap.min.css" rel="stylesheet"
-    integrity="sha384-eOJMYsd53ii+scO/bJGFsiCZc+5NDVN2yr8+0RDqr0Ql0h+rP48ckxlpbzKgwra6" crossorigin="anonymous">
-  <script src='https://cdn.jsdelivr.net/npm/chart.js@3.1.1/dist/chart.min.js'></script>
-  <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
-  <!-- <link rel="stylesheet" href="menubarstyle.css"> -->
-  <!-- <link rel="stylesheet" href="CSS-Reset.css"> -->
-  <!-- Google font: -->
-  <link rel="preconnect" href="https://fonts.gstatic.com">
-  <link href="https://fonts.googleapis.com/css2?family=Leckerli+One&display=swap" rel="stylesheet">
-  <!-- MDB Bootstrap CSS -->
-  <!-- Font Awesome -->
-  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.1/css/all.min.css" rel="stylesheet" />
-  <!-- Google Fonts -->
-  <link href="https://fonts.googleapis.com/css?family=Roboto:300,400,500,700&display=swap" rel="stylesheet" />
-  <!-- MDB -->
-  <!-- <link href="https://cdnjs.cloudflare.com/ajax/libs/mdb-ui-kit/3.3.0/mdb.min.css" rel="stylesheet" /> -->
-  <!-- Custom style: -->
-  <link rel="stylesheet" href="nanostatstyle.css">
+  <title>NanoStat · 帮助</title>
+  <link rel="stylesheet" href="assets/app.css">
 </head>
 
-
-<!-- <body style="background-color: lightblue;"> -->
-
-<body>
-
-  <!-- Navigation bar -->
-  <nav class="navbar navbar-expand-md navbar-dark bg-primary">
-    <div class="container">
-      <!-- <nav class="navbar navbar-expand-md navbar-light"> -->
-      <!-- Brand icon: -->
-      <a href="#" class="navbar-brand" style="font-family: 'Leckerli One', cursive;">NanoStat</a>
-      <!-- Hamburger button: -->
-      <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#toggleMobileMenu"
-        aria-controls="toggleMobileMenu" aria-expanded="false" aria-table="Toggle navigation">
-        <span class="navbar-toggler-icon"></span>
-      </button>
-      <!-- Menu items: -->
-      <div class="collapse navbar-collapse" id="toggleMobileMenu">
-        <ul class="navbar-nav ms-auto text-center">
-          <li>
-            <a class="nav-link" href="index.html">Sweep</a>
-          </li>
-          <li>
-            <a class="nav-link" href="setup.html">Setup</a>
-          </li>
-          <li>
-            <a class="nav-link" href="panel.html">Panel</a>
-          </li>
-          <li>
-            <a class="nav-link" href="download.html">Download</a>
-          </li>
-
-          <li class="nav-item dropdown">
-            <a href="#" class="nav-link dropdown-toggle" id="navbarDropdown" role="button" data-bs-toggle="dropdown"
-              aria-expanded="false">System</a>
-            <ul class="dropdown-menu" aria-labeledby="navbarDropdown">
-              <li><a href="files.html" class="dropdown-item">Files</a></li>
-              <li><a href="wifi.html" class="dropdown-item">Wifi</a></li>
-              <li><a href="firmware.html" class="dropdown-item">Firmware</a></li>
-              <li><a href="reboot.html" class="dropdown-item">Reboot</a></li>
-
-            </ul>
-
-          </li>
-
-
-
-          <li>
-            <a class="nav-link active" href="help.html">Help</a>
-          </li>
-          <li>
-            <a class="nav-link" href="about.html">About</a>
-          </li>
-        </ul>
-      </div>
+<body data-page="help">
+  <nav class="nav">
+    <span class="nav__brand">NanoStat</span>
+    <a class="nav__link" href="index.html">控制台</a>
+    <a class="nav__link" href="setup.html">参数</a>
+    <a class="nav__link" href="system.html">系统</a>
+    <a class="nav__link is-active" href="help.html">帮助</a>
   </nav>
 
-  <!-- #0D6EFD is color of Bootstrap menubar "primary" -->
-  <!-- 	hsl(216, 98%, 52%) -->
+  <main class="page">
+    <header class="page__head">
+      <h1>帮助</h1>
+      <p class="page__sub">使用流程、扫描模式说明与参数限制</p>
+    </header>
 
-  <!-- Page title -->
-  <!-- <header class="container text-center mybox1"> -->
-  <header class="container text-center ">
-    <h1>Help</h1>
-  </header>
+    <div class="stack">
+      <section class="card">
+        <div class="card__head">
+          <h2>快速开始</h2>
+        </div>
+        <ol class="list">
+          <li class="list__item"><span>1. 上电后等待蓝色 LED 停止闪烁，表示初始化完成。</span></li>
+          <li class="list__item"><span>2. 手机或电脑连接热点 <span class="mono">NanoStatAP</span>，打开 <span class="mono">http://192.168.4.1/</span>。</span></li>
+          <li class="list__item"><span>3. 在「参数」页确认扫描参数，点击「保存参数」。</span></li>
+          <li class="list__item"><span>4. 回到「控制台」：启动实验，或点击某个扫描模式执行单次扫描。</span></li>
+          <li class="list__item"><span>5. 扫描结束后曲线显示在下方，可保存 CSV 或下载 data.txt。</span></li>
+        </ol>
+      </section>
 
-  <div class="container">
+      <section class="card" id="network">
+        <div class="card__head">
+          <h2>网络与访问方式</h2>
+        </div>
+        <p class="card__sub">
+          设备始终开启热点 <span class="mono">NanoStatAP</span>，同时会尝试连接已保存的路由器。因此有两种访问方式，页面顶部的提示条会显示当前处于哪一种。
+        </p>
+        <div class="kv"><span class="kv__k">热点直连</span><span class="kv__v">电脑 / 手机连 NanoStatAP，打开 http://192.168.4.1/</span></div>
+        <div class="kv"><span class="kv__k">路由模式</span><span class="kv__v">电脑与设备连同一路由器，打开 http://nanostat.local/ 或路由器分配的 IP</span></div>
+        <p class="card__sub mt-12">
+          两种方式功能完全一致，都不需要外网：图表库随网页一起存放在设备上。
+          区别只在加载速度——路由模式下页面传输更快，热点直连则不受现场路由器影响，适合外出使用。
+        </p>
+        <p class="hint mt-12">
+          热点直连时电脑无法上网，这是正常的：浏览器的「无 Internet」提示不影响采集与控制。
+          Windows / macOS 支持 <span class="mono">nanostat.local</span>；部分安卓设备不解析 mDNS，请直接使用路由器分配的 IP。
+        </p>
+      </section>
 
-    <h3>Instructions:</h3>
-    <p>On bootup, blue LED flashes until setup complete.</p>
-    <p>To run a sweep, go to SWEEP page and click button for sweep type. (See below for sweep type explanations.) During
-      sweep, blue LED flashes (unless time per point less than 10 ms).</p>
-    <p>To set sweep parameters, goto setup page. Click a button to run a sweep. Sweep is plotted on webpage at end of
-      sweep, and automatically downloaded.</p>
-    <p>To bias at a specific point and monitor voltages, goto panel page.</p>
-    <p>Zero bias: Minimum cell voltage with LMP91000 is 1% of 1.5V = 15 mV, gives slight discontinuity at origin.</p>
-    <h3>Network:</h3>
-    <p>If no WIFI connection is made with stored credentials, NanoStat goes into access point mode. Use the SSID
-      "Nanostat" and enter credentials on website at 192.168.4.1.</p>
-    <p>Once connected, on a laptop goto http://nanostat.local. On an Android mobile device, you need the actual IP
-      address of the nanostat from your router. Contact your network administrator to find this from the router.</p>
+      <section class="card">
+        <div class="card__head">
+          <h2>扫描模式</h2>
+        </div>
+        <div class="kv"><span class="kv__k">CV 循环伏安</span><span class="kv__v">Cyclic Voltammetry</span></div>
+        <div class="kv"><span class="kv__k">NPV 常规脉冲伏安</span><span class="kv__v">Normal Pulse Voltammetry</span></div>
+        <div class="kv"><span class="kv__k">DPV 差分脉冲伏安</span><span class="kv__v">Differential Pulse Voltammetry</span></div>
+        <div class="kv"><span class="kv__k">SWV 方波伏安</span><span class="kv__v">Square Wave Voltammetry</span></div>
+        <div class="kv"><span class="kv__k">CA 计时电流</span><span class="kv__v">Chronoamperometry</span></div>
+        <div class="kv"><span class="kv__k">DC 直流偏置</span><span class="kv__v">固定偏压下测 ADC 均值与标准差</span></div>
+        <div class="kv"><span class="kv__k">IV 曲线</span><span class="kv__v">线性扫描电压—电流</span></div>
+        <div class="kv"><span class="kv__k">Cal 校准</span><span class="kv__v">校准 DAC 与 ADC，结果写入 flash</span></div>
+        <div class="kv"><span class="kv__k">Misc 调试</span><span class="kv__v">在串口打印文件目录</span></div>
 
-    <h3>Calibration:</h3>
-    <p>To calibrate, run "Cal" with WE disconnected from RE/CE. (Short RE/CE). Calibrations saved to flash, persist
-      after reboot.</p>
+        <p class="card__sub mt-12">
+          各模式波形与原理可参考 BASi 教程：
+          <a href="https://www.basinc.com/manuals/EC_epsilon/Techniques/CycVolt/cv" target="_blank" rel="noreferrer">CV</a>、
+          <a href="https://www.basinc.com/manuals/EC_epsilon/techniques/Pulse/pulse#normal" target="_blank" rel="noreferrer">NPV</a>、
+          <a href="https://www.basinc.com/manuals/EC_epsilon/Techniques/Pulse/pulse#square" target="_blank" rel="noreferrer">SWV</a>、
+          <a href="https://www.basinc.com/manuals/EC_epsilon/Techniques/ChronoI/ca" target="_blank" rel="noreferrer">CA</a>。
+        </p>
+      </section>
 
+      <section class="card">
+        <div class="card__head">
+          <h2>参数限制</h2>
+        </div>
+        <div class="kv"><span class="kv__k">TIA 增益</span><span class="kv__v">需满足 −0.75 V &lt; VTIA &lt; 1 V，VTIA = RTIA × 电流</span></div>
+        <div class="kv"><span class="kv__k">单次扫描点数</span><span class="kv__v">不超过 5000</span></div>
+        <div class="kv"><span class="kv__k">最大池电压</span><span class="kv__v">±600 mV（DAC 输出的 20%）</span></div>
+        <div class="kv"><span class="kv__k">最小池电压</span><span class="kv__v">约 15 mV（1.5 V 的 1%），原点附近有轻微不连续</span></div>
+        <p class="card__sub mt-12">实验参数中：循环均质 1–59 分钟，停流平衡 1–1440 分钟，校准周期 1–168 小时，单次校准 1–180 分钟。</p>
+      </section>
 
-      <h3>Choosing TIA resistance (Trans-Impedance Amplifier):</h3>
-      <p>Due to limits on the ADC of the ESP32, you need to ensure -0.75 V < VTIA < 1 V, where VTIA = RTIA * WE current.</p>
-  
+      <section class="card">
+        <div class="card__head">
+          <h2>校准与数据</h2>
+        </div>
+        <p class="card__sub">
+          校准前将 WE 与 RE/CE 断开并短接 RE/CE，运行「Cal 校准」。结果保存在 flash，掉电不丢失。
+        </p>
+        <p class="card__sub mt-8">
+          每次扫描结束，原始数据写入设备上的 <span class="mono">data.txt</span>，可在控制台点击「下载 data.txt」获取；
+          「保存 CSV」按当前曲线内容在浏览器本地生成文件。
+        </p>
+      </section>
 
-      <h3>Maximum # of points:</h3>
-      <p>5000. Do not exceed. </p>
+      <section class="card">
+        <div class="card__head">
+          <h2>常见问题</h2>
+        </div>
+        <div class="kv"><span class="kv__k">曲线区域空白</span><span class="kv__v">图表库文件缺失，重新执行 uploadfs 上传网页</span></div>
+        <div class="kv"><span class="kv__k">顶部提示「热点直连」</span><span class="kv__v">当前通过 NanoStatAP 访问，设备未接路由器，属正常</span></div>
+        <div class="kv"><span class="kv__k">提示从机离线</span><span class="kv__v">流体控制板未连上主机，检查其供电与 WiFi</span></div>
+        <div class="kv"><span class="kv__k">启动实验无响应</span><span class="kv__v">确认从机在线；从机离线时主机拒绝启动</span></div>
+        <div class="kv"><span class="kv__k">网页打不开</span><span class="kv__v">确认已连接 NanoStatAP，或使用路由器分配的 IP</span></div>
+      </section>
 
-      <h3>Maximum cell voltage:</h3>
-      <p>The LMP91000 can bias the cell up to 20% of the DAC output of the ESP32. The ESP32 DAC is very non-linear above 3 V, and cannot go above 3.3 V which is the power supply voltage. Therefore the cell voltage is limited to 3 V * 20% = 600 mV, in either direction. </p>
+      <section class="card">
+        <div class="card__head">
+          <h2>关于</h2>
+        </div>
+        <p class="card__sub">NanoStat Firmware Rev. 1.0 · BurkeLab</p>
+        <p class="card__sub mt-8">
+          开源地址：<a href="https://github.com/PeterJBurke/Nanostat" target="_blank" rel="noreferrer">github.com/PeterJBurke/Nanostat</a>
+        </p>
+        <p class="card__sub mt-8">
+          Shawn Chia-Hung Lee, Peter J. Burke, “NanoStat: An open source, fully wireless potentiostat”,
+          Electrochimica Acta, 2022. <a href="https://doi.org/10.1016/j.electacta.2022.140481" target="_blank" rel="noreferrer">doi:10.1016/j.electacta.2022.140481</a>
+        </p>
+      </section>
+    </div>
+  </main>
 
-
-    <h3>Sweep modes:</h3>
-
-    <h6 class="mt-3">CV = Cyclic voltammetry.</h6>
-    <a href="https://www.basinc.com/manuals/EC_epsilon/Techniques/CycVolt/cv">Bioanalytical Systems, Inc. tutorial on
-      CV</a><br>
-    <img class="img-fluid" src="https://www.basinc.com/assets/img/manuals/EC_epsilon/Techniques/CycVolt/cv_wave_form.gif" alt="CV">
-
-
-    <h6 class="mt-3">NPV = Normal pulsed voltammetry.</h6>
-    <a href="https://www.basinc.com/manuals/EC_epsilon/techniques/Pulse/pulse#normal">Bioanalytical Systems, Inc.
-      tutorial on NPV</a><br>
-    <img class="img-fluid" src="https://www.basinc.com/assets/img/manuals/EC_epsilon/Techniques/Pulse/npv_wave_form.gif" alt="NPV">
-
-    <h6 class="mt-3">SWV = Square wave voltammetry.</h6>
-    <a href="https://www.basinc.com/manuals/EC_epsilon/Techniques/Pulse/pulse#square">Bioanalytical Systems, Inc.
-      tutorial on SWV</a><br>
-    <img class="img-fluid" src="https://www.basinc.com/assets/img/manuals/EC_epsilon/Techniques/Pulse/swv_wave_form.gif" alt="SWV">
-
-    <h6 class="mt-3">CA = Chronoamperometry.</h6>
-    <a href="https://www.basinc.com/manuals/EC_epsilon/Techniques/ChronoI/ca">Bioanalytical Systems, Inc. tutorial on
-      CA</a><br>
-    <img class="img-fluid" src="https://www.basinc.com/assets/img/manuals/EC_epsilon/Techniques/ChronoI/ca_wave_form.gif" alt="CA">
-
-    <h6 class="mt-3">DC = Fixed DC bias.</h6>
-    <p>
-      Sets dc bias voltage, reads ADC with various # readings per point {1, 5, 10, 50, 100, 500, 1000}, gives avg and
-      std deviation of ADC value in bits.
-    </p>
-
-    <h6 class="mt-3"6>IV = IV curve. </h6>
-
-    <h6 class="mt-3">Cal = Calibrate NanoStat.</h6>
-
-
-  </div>
-
-
-  <!-- Page footer -->
-  <!-- <footer class="container text-center myfooter fs-6 fw-lighter pt-3 fst-italic"> -->
-  <footer class="container text-center  fs-6 fw-lighter pt-3 fst-italic">
-    <p>NanoStat Firmware Rev. 1.0 @ BurkeLab 2024</p>
-  </footer>
-
-  <!-- Bootstrap JS -->
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.0-beta3/dist/js/bootstrap.bundle.min.js"
-    integrity="sha384-JEW9xMcG8R+pH31jmWH6WWP0WintQrMb4s7ZOdauHnUtxwoG2vI5DkLtS3qm9Ekf"
-    crossorigin="anonymous"></script>
-  <!-- MDB Bootstrap JS -->
-  <!-- MDB -->
-  <!-- <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/mdb-ui-kit/3.3.0/mdb.min.js"></script> -->
+  <footer class="foot">NanoStat Firmware Rev. 1.0 · BurkeLab</footer>
+  <script src="assets/app.js"></script>
 </body>
+
+</html>

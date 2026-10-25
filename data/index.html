@@ -1,146 +1,244 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-CN">
 
 <head>
   <meta charset="UTF-8">
-  <meta http-equiv="X-UA-Compatible" content="IE=edge">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>NanoStat
-  </title>
-  <!-- Bootstrap CSS -->
-  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.0-beta3/dist/css/bootstrap.min.css" rel="stylesheet"
-    integrity="sha384-eOJMYsd53ii+scO/bJGFsiCZc+5NDVN2yr8+0RDqr0Ql0h+rP48ckxlpbzKgwra6" crossorigin="anonymous">
-  <script src='https://cdn.jsdelivr.net/npm/chart.js@3.1.1/dist/chart.min.js'></script>
-  <script type="text/javascript" src="websocketcode.js"></script>
-  <script type="text/javascript" src="button_handle_JS.js"></script>
-  <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
-  <!-- <link rel="stylesheet" href="menubarstyle.css"> -->
-  <!-- <link rel="stylesheet" href="CSS-Reset.css"> -->
-  <!-- Google font: -->
-  <link rel="preconnect" href="https://fonts.gstatic.com">
-  <link href="https://fonts.googleapis.com/css2?family=Leckerli+One&display=swap" rel="stylesheet">
-  <!-- Custom style: -->
-  <link rel="stylesheet" href="nanostatstyle.css">
+  <title>NanoStat · 控制台</title>
+  <link rel="stylesheet" href="assets/uplot.min.css">
+  <link rel="stylesheet" href="assets/app.css">
+  <!-- 图表库随固件下发，无需外网；缺失时下方出现提示条，其余功能不受影响 -->
+  <script src="assets/uplot.min.js"></script>
 </head>
 
-
-<body>
-
-  <!-- Navigation bar -->
-  <nav class="navbar navbar-expand-md navbar-dark bg-primary">
-    <div class="container">
-      <!-- <nav class="navbar navbar-expand-md navbar-light"> -->
-      <!-- Brand icon: -->
-      <a href="#" class="navbar-brand" style="font-family: 'Leckerli One', cursive;">NanoStat</a>
-      <!-- Hamburger button: -->
-      <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#toggleMobileMenu"
-        aria-controls="toggleMobileMenu" aria-expanded="false" aria-table="Toggle navigation">
-        <span class="navbar-toggler-icon"></span>
-      </button>
-      <!-- Menu items: -->
-      <div class="collapse navbar-collapse" id="toggleMobileMenu">
-        <ul class="navbar-nav ms-auto text-center">
-          <li>
-            <a class="nav-link active" href="index.html">Sweep</a>
-          </li>
-          <li>
-            <a class="nav-link" href="setup.html">Setup</a>
-          </li>
-          <li>
-            <a class="nav-link" href="panel.html">Panel</a>
-          </li>
-          <li>
-            <a class="nav-link" href="download.html">Download</a>
-          </li>
-
-          <li class="nav-item dropdown">
-            <a href="#" class="nav-link dropdown-toggle" id="navbarDropdown" role="button" data-bs-toggle="dropdown"
-              aria-expanded="false">System</a>
-            <ul class="dropdown-menu" aria-labeledby="navbarDropdown">
-              <li><a href="files.html" class="dropdown-item">Files</a></li>
-              <li><a href="wifi.html" class="dropdown-item">Wifi</a></li>
-              <li><a href="firmware.html" class="dropdown-item">Firmware</a></li>
-              <li><a href="reboot.html" class="dropdown-item">Reboot</a></li>
-
-            </ul>
-
-          </li>
-
-
-
-          <li>
-            <a class="nav-link" href="help.html">Help</a>
-          </li>
-          <li>
-            <a class="nav-link" href="about.html">About</a>
-          </li>
-        </ul>
-      </div>
+<body data-page="console" data-ws="1">
+  <nav class="nav">
+    <span class="nav__brand">NanoStat</span>
+    <a class="nav__link is-active" href="index.html">控制台</a>
+    <a class="nav__link" href="setup.html">参数</a>
+    <a class="nav__link" href="system.html">系统</a>
+    <a class="nav__link" href="help.html">帮助</a>
   </nav>
 
-  <div class="container">
-    <h1 class="text-center">Sweep</h1>
-
-    <p>Current sweep mode:
-    <span id="sweep_mode_id"> UNKNOWN</span>
-    </p>
-    <p><b>Please</b> <u>choose</u> from the following sweep <i>options</i>:</p>
-
-
-    <button type="button" class="btn btn-primary my-2" onclick="on_Button_1_pressed()">CV!</button>
-    <button type="button" class="btn btn-primary my-2" onclick="on_Button_2_pressed()">NPV!</button>
-    <button type="button" class="btn btn-primary my-2" onclick="on_Button_11_pressed()">DPV!</button>
-    <button type="button" class="btn btn-primary my-2" onclick="on_Button_3_pressed()">SWV!</button>
-    <button type="button" class="btn btn-primary my-2" onclick="on_Button_4_pressed()">CA!</button>
-    <button type="button" class="btn btn-primary my-2" onclick="on_Button_5_pressed()">DC!</button>
-    <button type="button" class="btn btn-primary my-2" onclick="on_Button_6_pressed()">IV!</button>
-    <button type="button" class="btn btn-primary my-2" onclick="on_Button_7_pressed()">Cal!</button>
-    <button type="button" class="btn btn-primary my-2" onclick="on_Button_8_pressed()">Misc!</button>
-    <!-- <button onclick="on_Button_9_pressed()">9!</button>
-    <button onclick="on_Button_10_pressed()">10!</button> -->
-
-
-    <h3>Sweep modes:</h3>
-    <p>CV = Cyclic voltammetry.<br>
-      NPV = Normal pulsed voltammetry.<br>
-      DPV = Differential pulsed voltammetry.<br>
-      SWV = Square wave voltammetry.<br>
-      CA = Chronoamperometry.<br>
-      DC = Fixed DC bias noise test.<br>
-      IV = IV curve.<br>
-      Cal = calibrate NanoStat.<br>
-      Misc = Debug to console (serial).</p>
-
-
-  </div>
-
-  <div class="container">
-    <div class="row">
-      <div class="col-lg text-center">
-        <!-- Current vs. voltage -->
-        <div id="plotly-IV"></div>
+  <main class="page">
+    <header class="page__head row row--between">
+      <div>
+        <h1>控制台</h1>
+        <p class="page__sub">细胞代谢监测 · LMP91000 电化学检测 + 流体控制</p>
       </div>
-      <div class="col-lg text-center">
-        <!-- Current vs. time -->
-        <div id="plotly-IvsTime"></div>
+      <div class="row">
+        <span class="badge" data-ws-badge>连接中</span>
+        <span class="badge badge--off" id="slave-badge">从机离线</span>
+        <span class="badge" id="mode-badge">空闲</span>
+      </div>
+    </header>
+
+    <div class="grid--2">
+      <!-- ================= 左列：操作 ================= -->
+      <div class="stack">
+        <!-- 实验流程 -->
+        <section class="card">
+          <div class="card__head">
+            <h2>实验流程</h2>
+            <span class="card__sub">泵 / 阀自动循环</span>
+          </div>
+
+          <div class="grid--3">
+            <div class="stat">
+              <div class="stat__k">当前阶段</div>
+              <div class="stat__v" id="exp-state">空闲</div>
+            </div>
+            <div class="stat">
+              <div class="stat__k">已完成周期</div>
+              <div class="stat__v" id="exp-cycle">0</div>
+            </div>
+            <div class="stat">
+              <div class="stat__k">距下次校准</div>
+              <div class="stat__v mono" id="calib-left">--</div>
+            </div>
+          </div>
+
+          <div class="grid--3 my-12">
+            <div class="device">
+              <span><span class="dot" id="pump-dot"></span>循环泵</span>
+              <span id="pump-state">--</span>
+            </div>
+            <div class="device">
+              <span><span class="dot" id="valve0-dot"></span>切换阀</span>
+              <span id="valve0-state">--</span>
+            </div>
+            <div class="device">
+              <span><span class="dot" id="valve1-dot"></span>排废阀</span>
+              <span id="valve1-state">--</span>
+            </div>
+          </div>
+
+          <div class="row">
+            <button class="btn btn--primary" id="btn-start-exp">启动实验</button>
+            <button class="btn btn--danger" id="btn-stop-exp" disabled>停止实验</button>
+          </div>
+          <div class="hint hidden" id="exp-msg"></div>
+        </section>
+
+        <!-- 手动扫描 -->
+        <section class="card">
+          <div class="card__head">
+            <h2>手动扫描</h2>
+            <a class="card__sub" href="setup.html">扫描参数 →</a>
+          </div>
+          <div class="row">
+            <button class="btn" data-sweep data-mode="CV" data-endpoint="button1pressed">CV 循环伏安</button>
+            <button class="btn" data-sweep data-mode="NPV" data-endpoint="button2pressed">NPV 常规脉冲</button>
+            <button class="btn" data-sweep data-mode="DPV" data-endpoint="button11pressed">DPV 差分脉冲</button>
+            <button class="btn" data-sweep data-mode="SWV" data-endpoint="button3pressed">SWV 方波伏安</button>
+            <button class="btn" data-sweep data-mode="CA" data-endpoint="button4pressed">CA 计时电流</button>
+            <button class="btn" data-sweep data-mode="DC" data-endpoint="button5pressed">DC 直流偏置</button>
+            <button class="btn" data-sweep data-mode="IV" data-endpoint="button6pressed">IV 曲线</button>
+            <button class="btn" data-sweep data-mode="CAL" data-endpoint="button7pressed">Cal 校准</button>
+            <button class="btn" data-sweep data-mode="MISC" data-endpoint="button8pressed">Misc 调试</button>
+          </div>
+          <p class="card__sub mt-8">扫描结果会显示在下方曲线区，并按需自动落盘到 data.txt。</p>
+        </section>
+
+        <!-- 实验参数 -->
+        <section class="card">
+          <div class="card__head">
+            <h2>实验参数</h2>
+            <span class="card__sub">修改后立即生效</span>
+          </div>
+          <div class="grid--2">
+            <div class="field">
+              <label class="field__label" for="exp-circulate-min">循环均质时长（分钟，1–59）</label>
+              <input type="number" id="exp-circulate-min" value="5" min="1" max="59">
+            </div>
+            <div class="field">
+              <label class="field__label" for="exp-stopflow-min">停流平衡时长（分钟，1–1440）</label>
+              <input type="number" id="exp-stopflow-min" value="5" min="1" max="1440">
+            </div>
+            <div class="field">
+              <label class="field__label" for="exp-calib-interval-h">校准周期（小时，1–168）</label>
+              <input type="number" id="exp-calib-interval-h" value="6" min="1" max="168">
+            </div>
+            <div class="field">
+              <label class="field__label" for="exp-calib-min">单次校准时长（分钟，1–180）</label>
+              <input type="number" id="exp-calib-min" value="3" min="1" max="180">
+            </div>
+          </div>
+        </section>
+
+        <!-- 实时监测 -->
+        <section class="card">
+          <div class="card__head">
+            <h2>实时监测</h2>
+            <span class="card__sub">固定偏压连续采样</span>
+          </div>
+
+          <div class="row mb-12">
+            <label class="choice">
+              <input type="radio" name="monitor-active" value="true"> 启用
+            </label>
+            <label class="choice">
+              <input type="radio" name="monitor-active" value="false" checked> 停用
+            </label>
+          </div>
+
+          <div class="grid--2">
+            <div class="field">
+              <label class="field__label" for="lmp-gain">TIA 增益</label>
+              <select id="lmp-gain">
+                <option value="7">350 kOhm</option>
+                <option value="6" selected>120 kOhm</option>
+                <option value="5">35 kOhm</option>
+                <option value="4">14 kOhm</option>
+                <option value="3">7 kOhm</option>
+                <option value="2">3.5 kOhm</option>
+                <option value="1">2.75 kOhm</option>
+                <option value="0">外部电阻</option>
+              </select>
+            </div>
+            <div class="field">
+              <label class="field__label" for="cell-voltage">设定电压（mV，−792–792）</label>
+              <input type="number" id="cell-voltage" value="100" min="-792" max="792">
+            </div>
+            <div class="field">
+              <label class="field__label" for="num-readings">每点平均读数次数</label>
+              <input type="number" id="num-readings" value="1" min="1" max="1000000">
+            </div>
+            <div class="field">
+              <label class="field__label" for="delay-ms">点间延时（ms，1–1000）</label>
+              <input type="number" id="delay-ms" value="500" min="1" max="1000">
+            </div>
+            <div class="field">
+              <label class="field__label" for="max-points">浏览器最多保留点数</label>
+              <input type="number" id="max-points" value="100" min="10" max="10000">
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <!-- ================= 右列：状态 ================= -->
+      <div class="stack">
+        <section class="card">
+          <div class="card__head">
+            <h2>实时状态</h2>
+            <span class="card__sub">实时监测开启后刷新</span>
+          </div>
+          <div class="kv"><span class="kv__k">LMP91000 百分比</span><span class="kv__v" id="percentage">--</span></div>
+          <div class="kv"><span class="kv__k">DAC 输出电压</span><span class="kv__v" id="dac-vout">--</span></div>
+          <div class="kv"><span class="kv__k">ADC 平均（bit）</span><span class="kv__v" id="adc-bits">--</span></div>
+          <div class="kv"><span class="kv__k">ADC 平均（mV）</span><span class="kv__v" id="adc-mv">--</span></div>
+          <div class="kv"><span class="kv__k">平均电流</span><span class="kv__v" id="avg-current">--</span></div>
+          <div class="kv"><span class="kv__k">电流标准差</span><span class="kv__v" id="std-current">--</span></div>
+        </section>
+
+        <section class="card">
+          <div class="card__head">
+            <h2>使用提示</h2>
+          </div>
+          <p class="card__sub">
+            实验流程与手动扫描互斥：实验运行中请勿再触发单次扫描。
+            改动「实验参数」后立即下发给主机，无需重启。
+          </p>
+        </section>
       </div>
     </div>
-  </div>
 
+    <!-- 实时曲线 -->
+    <section class="card mt-16">
+      <div class="card__head">
+        <div class="row">
+          <h2>实时曲线</h2>
+          <span class="card__sub">数据点 <span id="point-count" class="mono">0</span></span>
+        </div>
+        <div class="row">
+          <button class="btn btn--sm" id="btn-save">保存 CSV</button>
+          <a class="btn btn--sm btn--primary" href="downloadfile">下载 data.txt</a>
+        </div>
+      </div>
 
-  <!-- Page footer -->
-  <!-- <footer class="container text-center myfooter fs-6 fw-lighter pt-3 fst-italic"> -->
-    <footer class="container text-center  fs-6 fw-lighter pt-3 fst-italic">
-      <p>NanoStat Firmware Rev. 1.0 @ BurkeLab 2024</p>
-    </footer>
+      <div data-tabs>
+        <div class="tabs">
+          <button class="tabs__btn is-active" data-tab="it">电流 — 时间</button>
+          <button class="tabs__btn" data-tab="iv">电流 — 电压</button>
+        </div>
+        <div class="tabs__panel is-active" data-panel="it">
+          <div class="chart" id="chart-it"></div>
+        </div>
+        <div class="tabs__panel" data-panel="iv">
+          <div class="chart" id="chart-iv"></div>
+        </div>
+      </div>
 
-<!-- Plotly JS -->
-  <script type="text/javascr" src="plotlyplot.js"></script>
+      <p class="hint hint--warn hidden" id="chart-fallback">
+        图表库文件缺失（assets/uplot.min.js），曲线不可用。请重新执行 uploadfs 上传网页文件；采集、控制与数据下载不受影响。
+      </p>
+    </section>
+  </main>
 
+  <footer class="foot">NanoStat Firmware Rev. 1.0 · BurkeLab</footer>
 
-
-  <!-- Bootstrap JS -->
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.0-beta3/dist/js/bootstrap.bundle.min.js"
-    integrity="sha384-JEW9xMcG8R+pH31jmWH6WWP0WintQrMb4s7ZOdauHnUtxwoG2vI5DkLtS3qm9Ekf"
-    crossorigin="anonymous"></script>
+  <script src="assets/app.js"></script>
+  <script src="assets/console.js"></script>
 </body>
+
+</html>
