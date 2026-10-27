@@ -24,6 +24,8 @@
     measure: "开始静测",
     measuring: "静测采集",
     pump_start: "启动循环泵",
+    calib_flush: "校准：开阀冲洗/排废",
+    calib_wait: "校准：关阀静置",
   };
 
   const SWEEP_LABEL = {
@@ -303,6 +305,12 @@
     if ("conc_valid" in msg) {
       const concEl = $("#last-conc");
       if (concEl) concEl.textContent = msg.conc_valid ? NS.fmt(msg.last_conc, 4) + " mM" : "--";
+    }
+    if ("time_synced" in msg) {
+      const tsEl = $("#time-sync");
+      if (tsEl) {
+        tsEl.textContent = msg.time_synced ? "已对时（绝对时间戳可用）" : "未对时（仅相对时间）";
+      }
     }
 
     const faultEl = $("#exp-fault");
@@ -665,6 +673,13 @@
 
       NS.emit("json", {
         exp_state: expState,
+        mode: expState === "IDLE" ? "idle" : "auto",
+        next_action: expState === "CIRCULATE" ? "pump_stop"
+          : expState === "STOP_FLOW" ? "measure"
+          : expState === "MEASURE" ? "measuring" : "none",
+        next_in_ms: expState === "MEASURE"
+          ? 0
+          : 30000 - Math.floor(elapsed * 1000) % 30000,
         exp_cycle: 1 + Math.floor(elapsed / 60),
         calib_in_ms: Math.max(0, 600000 - (elapsed * 1000) % 600000),
         pump_on: expState === "CIRCULATE",
@@ -682,6 +697,7 @@
         stopflow_min: 5,
         calib_interval_h: 6,
         calib_min: 3,
+        time_synced: true,
       });
 
       NS.emit("json", {

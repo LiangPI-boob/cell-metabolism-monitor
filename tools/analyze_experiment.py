@@ -45,7 +45,14 @@ def parse_float(value):
 
 
 def load_sessions(path):
-    """把 CSV 按 SESSION_START 分成多个会话。"""
+    """把 CSV 按 SESSION_START 分成多个会话。
+
+    兼容两版表结构：
+      旧版：uptime_ms, session_ms, cycle, type, current_uA, ...
+      新版：seq, source, type, cycle, t_boot_ms, t_epoch_ms, session_ms,
+            current_uA, conc_mM, slope_uA_per_mM, intercept_uA, value, unit, note
+    只统计电化学测量行（source 为空或 electrochem，type = MEASURE）。
+    """
     sessions = []
     current = None
 
@@ -55,6 +62,8 @@ def load_sessions(path):
             raise ValueError("CSV 没有表头")
         for row in reader:
             row_type = (row.get("type") or "").strip().upper()
+            row_source = (row.get("source") or "").strip().lower()
+
             if row_type == "SESSION_START":
                 current = {"index": len(sessions) + 1, "measures": []}
                 sessions.append(current)
@@ -66,16 +75,21 @@ def load_sessions(path):
 
             if row_type != "MEASURE":
                 continue
+            if row_source and row_source != "electrochem":
+                continue
 
-            uptime_ms = parse_float(row.get("uptime_ms"))
+            boot_ms = parse_float(row.get("t_boot_ms"))
+            if boot_ms is None:
+                boot_ms = parse_float(row.get("uptime_ms"))
             session_ms = parse_float(row.get("session_ms"))
-            t_ms = session_ms if session_ms is not None else uptime_ms
+            t_ms = session_ms if session_ms is not None else boot_ms
             if t_ms is None:
                 continue
 
             current["measures"].append({
                 "cycle": (row.get("cycle") or "").strip(),
                 "t_ms": t_ms,
+                "epoch_ms": parse_float(row.get("t_epoch_ms")),
                 "current": parse_float(row.get("current_uA")),
                 "conc": parse_float(row.get("conc_mM")),
                 "slope": parse_float(row.get("slope_uA_per_mM")),
@@ -322,28 +336,34 @@ def write_svg(path, sessions, title):
 # 演示数据
 # ------------------------------------------------------------
 def make_demo_csv(path, hours=72.0, interval_min=15.0, nominal=5.0):
-    """生成 72 h、每 15 min 一个点、带缓慢漂移和噪声的演示数据。"""
+    """生成 72 h、每 15 min 一个点、带缓慢漂移和噪声的演示数据（新版表结构）。"""
+    epoch0 = 1761494400000  # 2026-10-27 00:00:00 +08:00，仅用于演示
     rows = []
-    rows.append(["uptime_ms", "session_ms", "cycle", "type", "current_uA",
-                 "conc_mM", "slope_uA_per_mM", "intercept_uA", "note"])
-    rows.append(["5000", "0", "0", "SESSION_START", "0", "", "2.4", "1.0", ""])
+    rows.append(["seq", "source", "type", "cycle", "t_boot_ms", "t_epoch_ms",
+                 "session_ms", "current_uA", "conc_mM", "slope_uA_per_mM",
+                 "intercept_uA", "value", "unit", "note"])
+    rows.append(["1", "system", "SESSION_START", "0", "5000", str(epoch0 + 5000),
+                 "0", "", "", "2.4", "1.0", "", "", ""])
 
     slope = 2.4
     intercept = 1.0
     total_min = int(hours * 60)
     cycle = 0
     t_min = 0
+    seq = 1
     while t_min <= total_min:
         t_h = t_min / 60.0
         cycle += 1
+        seq += 1
         conc = nominal - 0.0045 * t_h + random.gauss(0, 0.025)
         if cycle in (37, 128):
             conc -= 0.35  # 两个异常点
         current = slope * conc + intercept + random.gauss(0, 0.03)
         t_ms = int(t_min * 60000)
-        rows.append([str(5000 + t_ms), str(t_ms), str(cycle), "MEASURE",
+        rows.append([str(seq), "electrochem", "MEASURE", str(cycle),
+                     str(5000 + t_ms), str(epoch0 + 5000 + t_ms), str(t_ms),
                      "%.5f" % current, "%.5f" % conc, "%.4f" % slope,
-                     "%.4f" % intercept, ""])
+                     "%.4f" % intercept, "", "", ""])
         t_min += int(interval_min)
 
     with open(path, "w", encoding="utf-8", newline="") as f:

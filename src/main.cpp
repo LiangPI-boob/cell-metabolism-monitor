@@ -10,6 +10,7 @@ bool print_output_to_serial = true; // prints verbose output to serial
 #include <ESPAsyncWebServer.h>
 #include <ESPmDNS.h>
 #include <SPIFFS.h>
+#include <time.h>
 #include <AsyncJson.h>
 // 凭据来自不入库的 wifi_credentials.h（由 wifi_credentials.example.h 复制）。
 #if __has_include("wifi_credentials.h")
@@ -69,6 +70,13 @@ void expStop();            // 停止实验
 void expManual(uint8_t target, bool on); // 手动控制泵/阀（0=泵 1=切换阀 2=排废阀）
 void expBroadcastState();  // 向网页广播实验/链路状态
 void expPumpPctApply();    // 泵运行中应用新的 PWM 占空比
+
+// 多源数据同步（统一时钟 + 通用数据行）
+void timeSyncTick();       // NTP 对时（非阻塞）
+uint64_t nowEpochMs();     // 绝对时间（ms），未对时返回 0
+void expLogExt(const char *source, const char *type, double value,
+               const char *unit, const char *note);
+void expLogTimeSync();     // 记录 boot→epoch 映射，供离线对齐
 
 // 实验参数（定义在文件后部的调度模块）
 extern uint32_t exp_param_circulate_ms;
@@ -3801,6 +3809,16 @@ void handle_websocket_text(uint8_t *payload)
       g_concIntercept = m_JSONdoc_from_payload["change_conc_intercept"] | g_concIntercept;
       saveConcCalib();
     }
+    // ===== 多源数据注入（预留给细胞活性等异构传感器）=====
+    // 示例：{"ext_source":"cell_activity","ext_type":"FLUO","ext_value":123.4,"ext_unit":"a.u."}
+    if (m_key_string == "ext_source")
+    {
+      const char *src = m_JSONdoc_from_payload["ext_source"] | "external";
+      const char *typ = m_JSONdoc_from_payload["ext_type"] | "SAMPLE";
+      const char *uni = m_JSONdoc_from_payload["ext_unit"] | "";
+      double val      = m_JSONdoc_from_payload["ext_value"] | 0.0;
+      expLogExt(src, typ, val, uni, "ws injection");
+    }
   }
 
   // if (true == false) // if key = "change_cell_voltage_to"
@@ -4364,6 +4382,7 @@ void loop()
   // ===== 新增：从机通信 + 实验调度（非阻塞，每圈都要跑）=====
   slaveLoop();
   serviceExperiment();
+  timeSyncTick();   // 统一时钟：STA 在线时自动 NTP 对时
 
   if (m_send_websocket_test_data_in_loop == true) // do things here in loop at full speed
   {
@@ -4714,11 +4733,12 @@ uint32_t exp_param_circulate_ms      = 300000UL;    // 循环均质  5 min
 uint32_t exp_param_stopflow_ms       = 300000UL;    // 停流平衡  5 min
 uint32_t exp_param_calib_interval_ms = 21600000UL;  // 校准周期  6 h
 uint32_t exp_param_calib_ms          = 180000UL;    // 单次校准  3 min
-uint32_t exp_param_valve_open_ms     = 10000UL;     // 停流开始后阀门开启 10 s（≤30 s）
+uint32_t exp_param_valve_open_ms     = 10000UL;     // 校准阶段阀门开启/排废 10 s（≤30 s）
+
 uint32_t exp_param_pump_pct          = 50UL;        // 泵 PWM 占空比（%，25 号口）
 
 bool    g_expManual    = false;  // 手动接管：为 true 时自动流程已退出
-uint8_t g_expStopPhase = 0;      // 停流子阶段：0=阀门开启中 1=阀门已关闭静置
+uint8_t g_expCalibPhase = 0;     // 校准子阶段：0=开阀冲洗/排废 1=关阀静置
 bool    g_expMeasuring = false;  // 静测采集中（阻塞期间网页显示「进行中」）
 
 const char* expStateName(ExpState s)
@@ -4774,53 +4794,146 @@ void saveConcCalib()
   Serial.println(s);
 }
 
-/* ---------------- 实验数据存档 ---------------- */
-void expLogAppend(uint32_t cycle, const char *type, float currentUA, float conc,
-                  bool concValid, const char *note);
+/* ---------------- 实验数据存档（多源统一时间戳） ---------------- */
+// 统一表结构：每条记录同时带 boot 相对时间与 epoch 绝对时间，
+// source 区分来源，便于后续异构数据按时间对齐（FR-9）。
+//   source：electrochem（电化学）| cell_activity（细胞活性，预留）| fluid（泵阀）| system
+#define LOG_FILE   "/experiment.csv"
+#define LOG_BACKUP "/experiment_prev.csv"
+#define LOG_HEADER "seq,source,type,cycle,t_boot_ms,t_epoch_ms,session_ms,current_uA,conc_mM,slope_uA_per_mM,intercept_uA,value,unit,note"
 
-void expLogBeginSession()
+uint32_t g_logSeq = 0;
+
+/* ---------------- 统一时钟 ---------------- */
+uint64_t g_bootEpochMs     = 0;   // 0 = 尚未对时
+bool     g_timeSyncStarted = false;
+uint32_t g_lastTimeChkMs   = 0;
+
+// 通用写行：hasCurrent / concValid 控制电化学字段是否留空；
+// unit 非空时才写 value，其他来源（如细胞活性）用它。
+void expLogRow(const char *source, const char *type, uint32_t cycle,
+               bool hasCurrent, float currentUA,
+               bool concValid, float conc,
+               double value, const char *unit, const char *note)
 {
-  File f = SPIFFS.open("/experiment.csv", "a");
+  File f = SPIFFS.open(LOG_FILE, "a");
   if (!f)
   {
-    Serial.println("[LOG] 无法打开 /experiment.csv");
+    Serial.println("[LOG] 追加失败：" LOG_FILE);
     return;
   }
-  if (f.size() == 0)
-  {
-    f.println("uptime_ms,session_ms,cycle,type,current_uA,conc_mM,slope_uA_per_mM,intercept_uA,note");
-  }
+
+  uint64_t epochMs = nowEpochMs();
+
+  f.print(++g_logSeq);            f.print(',');
+  f.print(source ? source : "");  f.print(',');
+  f.print(type ? type : "");      f.print(',');
+  f.print(cycle);                 f.print(',');
+  f.print(millis());              f.print(',');
+  if (epochMs) f.print((unsigned long long)epochMs);
+  f.print(',');
+  f.print(millis() - g_expSessionStartMs); f.print(',');
+  if (hasCurrent) f.print(currentUA, 4);
+  f.print(',');
+  if (concValid) f.print(conc, 4);
+  f.print(',');
+  f.print(g_concSlope, 4);        f.print(',');
+  f.print(g_concIntercept, 4);    f.print(',');
+  if (unit && unit[0]) f.print(value, 4);
+  f.print(',');
+  f.print(unit ? unit : "");      f.print(',');
+  f.println(note ? note : "");
   f.close();
-  expLogAppend(0, "SESSION_START", 0, 0, false, "");
 }
 
 void expLogAppend(uint32_t cycle, const char *type, float currentUA, float conc,
                   bool concValid, const char *note)
 {
-  File f = SPIFFS.open("/experiment.csv", "a");
-  if (!f)
+  expLogRow("electrochem", type, cycle, true, currentUA, concValid, conc, 0.0, "", note);
+}
+
+// 其他来源（细胞活性等）的数据注入接口
+void expLogExt(const char *source, const char *type, double value,
+               const char *unit, const char *note)
+{
+  expLogRow(source, type, g_expCycleIdx, false, 0.0f, false, 0.0f, value, unit, note);
+  Serial.printf("[LOG] ext %s/%s = %.4f %s\n", source, type, value, unit ? unit : "");
+}
+
+// 记录 boot→epoch 映射：对时之前写入的行没有 epoch，可据此回推
+void expLogTimeSync()
+{
+  double epochSec = (double)(g_bootEpochMs / 1000ULL);
+  expLogRow("system", "TIME_SYNC", g_expCycleIdx, false, 0.0f, false, 0.0f,
+            epochSec, "epoch_s", "boot->epoch mapping");
+}
+
+void expLogBeginSession()
+{
+  // 表结构变了就把旧存档转存，避免新旧列错位
+  bool needNewFile = true;
+  File r = SPIFFS.open(LOG_FILE, "r");
+  if (r)
   {
-    Serial.println("[LOG] 追加失败：/experiment.csv");
+    String first = r.readStringUntil('\n');
+    first.trim();
+    needNewFile = (first != LOG_HEADER);
+    r.close();
+  }
+
+  if (needNewFile && SPIFFS.exists(LOG_FILE))
+  {
+    if (SPIFFS.exists(LOG_BACKUP)) SPIFFS.remove(LOG_BACKUP);
+    SPIFFS.rename(LOG_FILE, LOG_BACKUP);
+    Serial.println("[LOG] 旧格式存档已转存 " LOG_BACKUP);
+  }
+
+  File w = SPIFFS.open(LOG_FILE, "a");
+  if (!w)
+  {
+    Serial.println("[LOG] 无法打开 " LOG_FILE);
     return;
   }
-  f.print(millis());
-  f.print(',');
-  f.print(millis() - g_expSessionStartMs);
-  f.print(',');
-  f.print(cycle);
-  f.print(',');
-  f.print(type);
-  f.print(',');
-  f.print(currentUA, 4);
-  f.print(',');
-  if (concValid) f.print(conc, 4);
-  f.print(',');
-  f.print(g_concSlope, 4);
-  f.print(',');
-  f.print(g_concIntercept, 4);
-  f.print(',');
-  f.println(note ? note : "");
-  f.close();
+  if (w.size() == 0) w.println(LOG_HEADER);
+  w.close();
+
+  g_logSeq = 0;
+  expLogRow("system", "SESSION_START", 0, false, 0.0f, false, 0.0f, 0.0, "", "");
+}
+
+/* ---------------- 统一时钟 ---------------- */
+uint64_t nowEpochMs()
+{
+  if (g_bootEpochMs == 0) return 0;
+  return g_bootEpochMs + (uint64_t)millis();
+}
+
+// 非阻塞对时：STA 连上路由器后启一次 NTP；之后每 10 s 检查一次
+void timeSyncTick()
+{
+  if (millis() - g_lastTimeChkMs < 10000UL) return;
+  g_lastTimeChkMs = millis();
+
+  time_t nowSec = time(nullptr);
+  if (nowSec > 1700000000)   // 已拿到有效时间
+  {
+    if (g_bootEpochMs == 0)
+    {
+      g_bootEpochMs = (uint64_t)nowSec * 1000ULL - (uint64_t)millis();
+      Serial.print("[TIME] epoch ok: ");
+      Serial.println((unsigned long)nowSec);
+      expLogTimeSync();
+      expBroadcastState();
+    }
+    return;
+  }
+
+  if (!g_timeSyncStarted && WiFi.status() == WL_CONNECTED)
+  {
+    configTime(0, 0, "ntp.aliyun.com", "pool.ntp.org");
+    g_timeSyncStarted = true;
+    Serial.println("[TIME] NTP sync started");
+  }
 }
 
 /* ---------------- 静测电流取稳定段 ---------------- */
@@ -4849,12 +4962,123 @@ float expStableCurrent()
   return cnt ? (float)(sum / cnt) : 0.0f;
 }
 
+/* ---------------- 算法校准（漂移补偿）+ 自适应调度 ---------------- */
+// 校准历史：记录每次硬件校准的 (时间, 斜率, 截距)。
+// 漂移补偿用历史趋势外推当前系数；自适应调度用漂移速率调整校准间隔。
+#define CALIB_HISTORY_MAX 16
+struct CalibPoint {
+  uint32_t t_ms;      // 相对实验启动 (ms)
+  float    slope;     // µA/mM
+  float    intercept; // µA
+};
+CalibPoint g_calibHistory[CALIB_HISTORY_MAX];
+int        g_calibCount = 0;
+
+// 根据漂移速率动态调整校准间隔（漂移快 -> 加密，慢 -> 放宽）
+void expAdaptCalibInterval()
+{
+  if (g_calibCount < 2)
+  {
+    exp_param_calib_interval_ms = 21600000UL;   // 默认 6 h
+    return;
+  }
+  CalibPoint &p1 = g_calibHistory[g_calibCount - 2];
+  CalibPoint &p2 = g_calibHistory[g_calibCount - 1];
+  float dt_h = (float)(p2.t_ms - p1.t_ms) / 3600000.0f;
+  if (dt_h <= 0.0f) return;
+
+  float drift_rate = fabs(p2.slope - p1.slope) / dt_h;  // µA/mM per hour
+
+  // 阈值是初值，需用 V1 标准液数据标定
+  if (drift_rate > 0.02f)        exp_param_calib_interval_ms = 10800000UL;  // 3 h
+  else if (drift_rate < 0.005f)  exp_param_calib_interval_ms = 32400000UL;  // 9 h
+  else                           exp_param_calib_interval_ms = 21600000UL;  // 6 h
+
+  Serial.printf("[CAL] drift=%.4f uA/mM/h -> interval=%lu min\n",
+                drift_rate, (unsigned long)(exp_param_calib_interval_ms / 60000UL));
+}
+
+// 硬件校准完成后调用：记录校准点 + 更新当前系数 + 触发自适应调度
+void expRecordCalibration(float slope, float intercept)
+{
+  uint32_t t_rel = millis() - g_expSessionStartMs;
+
+  if (g_calibCount < CALIB_HISTORY_MAX)
+  {
+    g_calibHistory[g_calibCount].t_ms      = t_rel;
+    g_calibHistory[g_calibCount].slope     = slope;
+    g_calibHistory[g_calibCount].intercept = intercept;
+    g_calibCount++;
+  }
+  else
+  {
+    // 环形：丢弃最旧，追加最新
+    for (int i = 1; i < CALIB_HISTORY_MAX; i++)
+      g_calibHistory[i - 1] = g_calibHistory[i];
+    g_calibHistory[CALIB_HISTORY_MAX - 1].t_ms      = t_rel;
+    g_calibHistory[CALIB_HISTORY_MAX - 1].slope     = slope;
+    g_calibHistory[CALIB_HISTORY_MAX - 1].intercept = intercept;
+  }
+
+  g_concSlope     = slope;
+  g_concIntercept = intercept;
+  expAdaptCalibInterval();
+
+  // 校准记录落盘，便于追溯（slope/intercept 已由 expLogAppend 一并写入）
+  expLogAppend(g_expCycleIdx, "CALIB", 0.0f, 0.0f, false, "hardware calibration");
+}
+
+// 漂移补偿：用最近两次校准的斜率趋势，线性外推当前时刻的系数
+void expCompensatedCalib(uint32_t t_rel, float &slope, float &intercept)
+{
+  if (g_calibCount == 0)
+  {
+    slope     = g_concSlope;
+    intercept = g_concIntercept;
+    return;
+  }
+  if (g_calibCount == 1)
+  {
+    slope     = g_calibHistory[0].slope;
+    intercept = g_calibHistory[0].intercept;
+    return;
+  }
+
+  CalibPoint &p1 = g_calibHistory[g_calibCount - 2];
+  CalibPoint &p2 = g_calibHistory[g_calibCount - 1];
+  float dt      = (float)(p2.t_ms - p1.t_ms);
+  float dt_now  = (float)(t_rel - p2.t_ms);
+
+  if (dt > 0.0f)
+  {
+    float k_s = (p2.slope - p1.slope) / dt;
+    float k_i = (p2.intercept - p1.intercept) / dt;
+    slope     = p2.slope     + k_s * dt_now;
+    intercept = p2.intercept + k_i * dt_now;
+  }
+  else
+  {
+    slope     = p2.slope;
+    intercept = p2.intercept;
+  }
+}
+
 void expUpdateConcentration(float currentUA)
 {
   g_lastCurrentUA = currentUA;
-  if (fabs(g_concSlope) > 1e-6)
+
+  float slope, intercept;
+  if (g_calibCount >= 2)
+    expCompensatedCalib(millis() - g_expSessionStartMs, slope, intercept);
+  else
   {
-    g_lastConc      = (currentUA - g_concIntercept) / g_concSlope;
+    slope     = g_concSlope;
+    intercept = g_concIntercept;
+  }
+
+  if (fabs(slope) > 1e-6)
+  {
+    g_lastConc      = (currentUA - intercept) / slope;
     g_lastConcValid = true;
   }
   else
@@ -4885,15 +5109,17 @@ void expBroadcastState()
     case EXP_CIRCULATE:
       m_next = "pump_stop";  m_total = exp_param_circulate_ms; break;
     case EXP_STOP_FLOW:
-      if (g_expStopPhase == 0) { m_next = "valve_close"; m_total = exp_param_valve_open_ms; }
-      else                     { m_next = "measure";     m_total = exp_param_stopflow_ms; }
-      break;
+      // 停流 = 泵停 + 阀关，保持闭环密闭静置
+      m_next = "measure";  m_total = exp_param_stopflow_ms; break;
     case EXP_MEASURE:
       if (g_expMeasuring) { m_next = "measuring"; }
       else                { m_next = "measure"; m_total = 2000UL; }
       break;
     case EXP_CALIBRATE:
-      m_next = "pump_start"; m_total = exp_param_calib_ms; break;
+      // 校准：先开阀冲洗/排废，再关阀静置
+      if (g_expCalibPhase == 0) { m_next = "calib_flush"; m_total = exp_param_valve_open_ms; }
+      else                      { m_next = "calib_wait";  m_total = exp_param_calib_ms; }
+      break;
     default:
       break;
   }
@@ -4945,6 +5171,8 @@ void expBroadcastState()
   s += String(g_concSlope, 4);
   s += ",\"calib_intercept\":";
   s += String(g_concIntercept, 4);
+  s += ",\"time_synced\":";
+  s += (g_bootEpochMs ? "true" : "false");
   s += "}";
   m_websocketserver.broadcastTXT(s.c_str(), s.length());
   if (g_expState != EXP_IDLE)
@@ -5032,7 +5260,7 @@ void expStart()
   g_expStartMs     = now;
   g_expSessionStartMs = now;
   g_expManual      = false;
-  g_expStopPhase   = 0;
+  g_expCalibPhase  = 0;
   g_expMeasuring   = false;
   g_expFault       = false;
   g_expFaultCode   = "";
@@ -5043,7 +5271,11 @@ void expStart()
   g_expState       = EXP_CIRCULATE;
   // 先归位（手动遗留的阀门/泵全部关闭），再开泵
   slaveSend("{\"id\":" + String(g_expCmdId++) + ",\"cmd\":\"stop_all\"}");
+  g_calibCount     = 0;
   expLogBeginSession();
+  // 算法校准：初始标定（若有）作为第一个校准点
+  if (fabs(g_concSlope) > 1e-6)
+    expRecordCalibration(g_concSlope, g_concIntercept);
   expPumpRun();
   g_slavePumpOn = true;
   g_slaveValve0 = false;
@@ -5060,7 +5292,7 @@ void expStop()
   g_expFault     = false;
   g_expFaultCode = "";
   g_expManual    = false;
-  g_expStopPhase = 0;
+  g_expCalibPhase = 0;
   g_expMeasuring = false;
   Sweep_Mode     = dormant;
   g_slavePumpOn  = false;
@@ -5091,7 +5323,7 @@ void expManual(uint8_t target, bool on)
   }
 
   g_expManual    = true;
-  g_expStopPhase = 0;
+  g_expCalibPhase = 0;
   g_expMeasuring = false;
 
   if (target == 0)
@@ -5186,30 +5418,18 @@ void serviceExperiment()
       if (now - g_expStateStart >= exp_param_circulate_ms)
       {
         slaveSend("{\"id\":" + String(g_expCmdId++) + ",\"cmd\":\"stop_all\"}");
-        // 停流阶段开始：两路阀门先开 exp_param_valve_open_ms，随后关闭静置
-        expValveSet(0, true);
-        expValveSet(1, true);
+        // 停流：泵停 + 阀关，闭环密闭静置（不在停流阶段开阀）
         g_slavePumpOn   = false;
-        g_slaveValve0   = true;
-        g_slaveValve1   = true;
-        g_expStopPhase  = 0;
+        g_slaveValve0   = false;
+        g_slaveValve1   = false;
         g_expState      = EXP_STOP_FLOW;
         g_expStateStart = now;
         expBroadcastState();
       }
       break;
 
-    // ---- ② 停流平衡（子阶段 0：阀门开启；子阶段 1：关阀静置）----
+    // ---- ② 停流平衡（泵停 + 阀全关，闭环密闭）----
     case EXP_STOP_FLOW:
-      if (g_expStopPhase == 0 && now - g_expStateStart >= exp_param_valve_open_ms)
-      {
-        slaveSend("{\"id\":" + String(g_expCmdId++) + ",\"cmd\":\"stop_all\"}");
-        g_slaveValve0  = false;
-        g_slaveValve1  = false;
-        g_expStopPhase = 1;
-        expBroadcastState();
-        break;
-      }
       if (now - g_expStateStart >= exp_param_stopflow_ms)
       {
         g_expState      = EXP_MEASURE;
@@ -5230,14 +5450,23 @@ void serviceExperiment()
         float m_current = expStableCurrent();
         expUpdateConcentration(m_current);
         g_expCycleIdx++;
-        g_expStopPhase = 0;
+        g_expCalibPhase = 0;
         expLogAppend(g_expCycleIdx, "MEASURE", m_current, g_lastConc, g_lastConcValid, "");
         Serial.printf("[EXP] cycle=%u  I=%.4f uA  C=%.4f mM (valid=%d)\n",
                       g_expCycleIdx, m_current, g_lastConc, g_lastConcValid);
 
         if (millis() - g_expLastCalibMs >= exp_param_calib_interval_ms)
         {
-          g_expState = EXP_CALIBRATE;
+          g_expState      = EXP_CALIBRATE;
+          g_expCalibPhase = 0;
+          // 校准支路（原停流阶段的开阀逻辑移到这里）：
+          // 开切换阀 V1（标准液侧）+ 排废阀 V2（废液侧），先靠重力/静压置换
+          expValveSet(0, true);
+          expValveSet(1, true);
+          g_slaveValve0 = true;
+          g_slaveValve1 = true;
+          expLogAppend(g_expCycleIdx, "CALIBRATE_START", 0, 0, false,
+                       "valve0+valve1 open");
         }
         else
         {
@@ -5249,18 +5478,38 @@ void serviceExperiment()
       }
       break;
 
-    // ---- ④ 在线校准（占位：仅计时；后续接入切阀 + 标准液）----
+    // ---- ④ 在线校准（子阶段 0：开阀冲洗/排废；子阶段 1：关阀静置）----
     case EXP_CALIBRATE:
+    {
+      uint32_t m_flush = exp_param_valve_open_ms;
+      if (m_flush > exp_param_calib_ms) m_flush = exp_param_calib_ms;
+
+      if (g_expCalibPhase == 0 && now - g_expStateStart >= m_flush)
+      {
+        slaveSend("{\"id\":" + String(g_expCmdId++) + ",\"cmd\":\"stop_all\"}");
+        g_slaveValve0  = false;
+        g_slaveValve1  = false;
+        g_expCalibPhase = 1;
+        expBroadcastState();
+        break;
+      }
+
       if (now - g_expStateStart >= exp_param_calib_ms)
       {
         g_expLastCalibMs = millis();
+        // TODO 硬件校准：在子阶段 0 内需开泵抽标准液经电极流到 V2 排废，
+        //      并在关阀静置后静测标准液读数，得到新斜率/截距，再调用
+        //      expRecordCalibration(newSlope, newIntercept)。
+        //      前提：回流支路需夹断（或加第 3 个阀），否则标准液可能进下腔。
         expLogAppend(g_expCycleIdx, "CALIBRATE_PLACEHOLDER", 0, 0, false,
                      "standard-liquid branch not implemented");
         g_expState       = EXP_CIRCULATE;
+        g_expCalibPhase  = 0;
         g_expStateStart  = millis();
         expPumpRun();
         expBroadcastState();
       }
       break;
+    }
   }
 }
