@@ -98,6 +98,7 @@
           </div>
           <p class="field__hint">25 号口 PWM 占空比，用于调整泵输出功率；运行中调整立即生效。</p>
           <div class="hint hidden" id="exp-msg"></div>
+          <div class="hint hint--danger hidden" id="exp-fault"></div>
         </section>
 
         <!-- 手动扫描 -->
@@ -147,7 +148,16 @@
               <label class="field__label" for="exp-calib-min">单次校准时长（分钟，1–180）</label>
               <input type="number" id="exp-calib-min" value="3" min="1" max="180">
             </div>
+            <div class="field">
+              <label class="field__label" for="conc-slope">浓度灵敏度（µA/mM，0 表示不换算）</label>
+              <input type="number" step="any" id="conc-slope" value="0">
+            </div>
+            <div class="field">
+              <label class="field__label" for="conc-intercept">浓度截距（µA）</label>
+              <input type="number" step="any" id="conc-intercept" value="0">
+            </div>
           </div>
+          <p class="card__sub mt-8">灵敏度、截距为临时手填标定；在线校准接好后会由标准液自动更新。</p>
         </section>
 
         <!-- 实时监测 -->
@@ -213,6 +223,8 @@
           <div class="kv"><span class="kv__k">ADC 平均（mV）</span><span class="kv__v" id="adc-mv">--</span></div>
           <div class="kv"><span class="kv__k">平均电流</span><span class="kv__v" id="avg-current">--</span></div>
           <div class="kv"><span class="kv__k">电流标准差</span><span class="kv__v" id="std-current">--</span></div>
+          <div class="kv"><span class="kv__k">最近静测电流</span><span class="kv__v" id="last-current">--</span></div>
+          <div class="kv"><span class="kv__k">最近浓度</span><span class="kv__v" id="last-conc">--</span></div>
         </section>
 
         <section class="card">
@@ -236,6 +248,7 @@
         </div>
         <div class="row">
           <button class="btn btn--sm" id="btn-save">保存 CSV</button>
+          <a class="btn btn--sm" href="download_exp">下载实验 CSV</a>
           <a class="btn btn--sm btn--primary" href="downloadfile">下载 data.txt</a>
         </div>
       </div>

@@ -9,6 +9,8 @@
   "use strict";
 
   const NS = (window.NS = {});
+  // 本地演示：index.html?demo=1，不连设备，由页面脚本喂假数据
+  NS.demo = new URLSearchParams(location.search).get("demo") === "1";
 
   /* ---------- 基础工具 ---------- */
   NS.$ = (sel, root) => (root || document).querySelector(sel);
@@ -79,6 +81,7 @@
   function emit(type, detail) {
     NS.bus.dispatchEvent(new CustomEvent(type, { detail: detail }));
   }
+  NS.emit = emit;   // 演示模式 / 页面脚本注入消息用
 
   function connect() {
     const url = "ws://" + location.hostname + ":81/";
@@ -118,6 +121,10 @@
   }
 
   NS.send = function (payload) {
+    if (NS.demo) {
+      console.log("[DEMO] " + JSON.stringify(payload));
+      return true;
+    }
     if (socket && socket.readyState === WebSocket.OPEN) {
       socket.send(JSON.stringify(payload));
       return true;
@@ -187,7 +194,7 @@
   /* ---------- 启动 ---------- */
   document.addEventListener("DOMContentLoaded", function () {
     NS.initTabs();
-    initNetbar();
+    if (!NS.demo) initNetbar();
 
     const wsBadge = document.querySelector("[data-ws-badge]");
     if (wsBadge) {
@@ -199,8 +206,12 @@
         wsBadge.textContent = "未连接";
         wsBadge.className = "badge badge--off";
       });
+      if (NS.demo) {
+        wsBadge.textContent = "演示模式";
+        wsBadge.className = "badge badge--on";
+      }
     }
 
-    if (document.body.dataset.ws === "1") connect();
+    if (document.body.dataset.ws === "1" && !NS.demo) connect();
   });
 })();
