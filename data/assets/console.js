@@ -17,6 +17,15 @@
     CALIBRATE: "校准中",
   };
 
+  // 固件 expBroadcastState() 的 next_action 取值
+  const NEXT_ACTION_LABEL = {
+    pump_stop: "停止循环泵",
+    valve_close: "关闭阀门",
+    measure: "开始静测",
+    measuring: "静测采集",
+    pump_start: "启动循环泵",
+  };
+
   const SWEEP_LABEL = {
     CV: "CV 循环伏安",
     NPV: "NPV 常规脉冲",
@@ -37,6 +46,7 @@
     binVolts: null,
     sweeping: false,
     drawPending: false,
+    exp: { deadline: 0, action: "", auto: false, mode: "idle", pending: true, pendingPct: null },
   };
 
   /* ---------- 图表（uPlot，随固件一起下发，离线可用） ---------- */
@@ -181,11 +191,16 @@
     el.className = "badge" + (kind ? " badge--" + kind : "");
   }
 
-  function setDevice(dotId, stateId, on, onText, offText) {
+  function setDevice(dotId, stateId, rowId, on, onText, offText, offline) {
     const dot = document.getElementById(dotId);
     const label = document.getElementById(stateId);
-    if (dot) dot.classList.toggle("is-on", !!on);
-    if (label) label.textContent = on ? onText : offText;
+    const row = document.getElementById(rowId);
+    if (dot) {
+      dot.classList.toggle("is-on", !!on && !offline);
+      dot.classList.toggle("is-off", !!offline);
+    }
+    if (label) label.textContent = offline ? "离线" : on ? onText : offText;
+    if (row) row.classList.toggle("is-offline", !!offline);
   }
 
   function formatDuration(ms) {
@@ -196,6 +211,38 @@
     const s = total % 60;
     const pad = (n) => String(n).padStart(2, "0");
     return h > 0 ? h + ":" + pad(m) + ":" + pad(s) : pad(m) + ":" + pad(s);
+  }
+
+  // 倒计时用：到 0 显示 00:00（向上取整，最后一秒不会提前归零）
+  function formatCountdown(ms) {
+    const total = Math.max(0, Math.ceil(ms / 1000));
+    const h = Math.floor(total / 3600);
+    const m = Math.floor((total % 3600) / 60);
+    const s = total % 60;
+    const pad = (n) => String(n).padStart(2, "0");
+    return h > 0 ? h + ":" + pad(m) + ":" + pad(s) : pad(m) + ":" + pad(s);
+  }
+
+  function tickCountdown() {
+    const actEl = $("#next-action");
+    const inEl = $("#next-in");
+    if (!actEl || !inEl) return;
+    if (state.exp.mode === "offline") {
+      actEl.textContent = "从机离线";
+      inEl.textContent = "";
+      return;
+    }
+    if (!state.exp.auto) {
+      actEl.textContent = state.exp.mode === "manual" ? "手动控制（需重新启动实验）" : "--";
+      inEl.textContent = "";
+      return;
+    }
+    actEl.textContent = state.exp.action || "--";
+    if (!state.exp.pending) {
+      inEl.textContent = "进行中";
+      return;
+    }
+    inEl.textContent = formatCountdown(state.exp.deadline - Date.now());
   }
 
   function showMsg(text, kind) {
@@ -220,22 +267,58 @@
     const calibEl = $("#calib-left");
     if (calibEl) calibEl.textContent = formatDuration(msg.calib_in_ms);
 
-    setDevice("pump-dot", "pump-state", msg.pump_on, "运行", "停止");
-    setDevice("valve0-dot", "valve0-state", msg.valve0, "开启", "关闭");
-    setDevice("valve1-dot", "valve1-state", msg.valve1, "开启", "关闭");
-
     const online = msg.slave_link === "online";
+    setDevice("pump-dot", "pump-state", "row-pump", msg.pump_on, "运行", "停止", !online);
+    setDevice("valve0-dot", "valve0-state", "row-valve0", msg.valve0, "开启", "关闭", !online);
+    setDevice("valve1-dot", "valve1-state", "row-valve1", msg.valve1, "开启", "关闭", !online);
     setBadge($("#slave-badge"), online ? "从机在线" : "从机离线", online ? "on" : "off");
+
+    // 下一动作倒计时：以固件剩余毫秒为基准，页面本地按秒递减
+    // 从机离线时不显示倒计时（此时动作无法执行，显示会误导）
+    state.exp.mode = online ? (msg.mode || "idle") : "offline";
+    state.exp.auto = state.exp.mode === "auto";
+    state.exp.action = NEXT_ACTION_LABEL[msg.next_action] || "";
+    state.exp.pending = msg.next_action !== "measuring";
+    state.exp.deadline = state.exp.auto ? Date.now() + (Number(msg.next_in_ms) || 0) : 0;
+    tickCountdown();
 
     syncInput("exp-circulate-min", msg.circulate_min);
     syncInput("exp-stopflow-min", msg.stopflow_min);
+    syncInput("exp-valve-s", msg.valve_open_s);
     syncInput("exp-calib-interval-h", msg.calib_interval_h);
     syncInput("exp-calib-min", msg.calib_min);
+
+    // 占空比滑块：本地刚改过的值以固件回显为准，避免旧广播把滑块拉回去
+    const pctEl = document.getElementById("exp-pump-pct");
+    if (pctEl) {
+      if (msg.pump_pct !== undefined) {
+        if (state.exp.pendingPct !== null && Number(msg.pump_pct) === state.exp.pendingPct) {
+          state.exp.pendingPct = null;
+        }
+        if (state.exp.pendingPct === null) syncInput("exp-pump-pct", msg.pump_pct);
+      }
+      const pctVal = document.getElementById("exp-pump-pct-val");
+      if (pctVal) pctVal.textContent = pctEl.value + " %";
+    }
 
     const startBtn = $("#btn-start-exp");
     const stopBtn = $("#btn-stop-exp");
     if (startBtn) startBtn.disabled = msg.exp_state !== "IDLE" || !online;
     if (stopBtn) stopBtn.disabled = msg.exp_state === "IDLE";
+
+    // 手动按钮：离线全禁用；已处于目标状态的一侧禁用
+    const manualEnabled = {
+      "btn-pump-on": !msg.pump_on,
+      "btn-pump-off": !!msg.pump_on,
+      "btn-valve0-on": !msg.valve0,
+      "btn-valve0-off": !!msg.valve0,
+      "btn-valve1-on": !msg.valve1,
+      "btn-valve1-off": !!msg.valve1,
+    };
+    Object.keys(manualEnabled).forEach(function (id) {
+      const el = document.getElementById(id);
+      if (el) el.disabled = !online || !manualEnabled[id];
+    });
   }
 
   function renderRealtime(msg) {
@@ -446,6 +529,7 @@
     const map = {
       "exp-circulate-min": "change_exp_circulate_min",
       "exp-stopflow-min": "change_exp_stopflow_min",
+      "exp-valve-s": "change_exp_valve_s",
       "exp-calib-interval-h": "change_exp_calib_interval_h",
       "exp-calib-min": "change_exp_calib_min",
     };
@@ -456,6 +540,44 @@
         const payload = {};
         payload[map[id]] = Number(el.value);
         NS.send(payload);
+      });
+    });
+
+    // 泵 PWM 占空比：拖动即时更新读数，松手后下发
+    const pct = $("#exp-pump-pct");
+    if (pct) {
+      pct.addEventListener("input", function () {
+        const pctVal = $("#exp-pump-pct-val");
+        if (pctVal) pctVal.textContent = pct.value + " %";
+      });
+      pct.addEventListener("change", function () {
+        const v = Number(pct.value);
+        state.exp.pendingPct = v;
+        if (!NS.send({ change_exp_pump_pct: v })) {
+          state.exp.pendingPct = null;
+          showMsg("WebSocket 未连接，占空比未下发。", "danger");
+        }
+      });
+    }
+
+    // 手动控制：任一动作都会让固件退出自动流程
+    const manualMap = {
+      "btn-pump-on": { manual_pump: true },
+      "btn-pump-off": { manual_pump: false },
+      "btn-valve0-on": { manual_valve0: true },
+      "btn-valve0-off": { manual_valve0: false },
+      "btn-valve1-on": { manual_valve1: true },
+      "btn-valve1-off": { manual_valve1: false },
+    };
+    Object.keys(manualMap).forEach((id) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.addEventListener("click", function () {
+        if (!NS.send(manualMap[id])) {
+          showMsg("WebSocket 未连接，无法手动控制。", "danger");
+          return;
+        }
+        showMsg("已切换到手动控制，自动流程已停止；恢复自动请重新点击「启动实验」。", "warn");
       });
     });
   }
@@ -506,6 +628,9 @@
     bindDataActions();
     bindTabs();
 
+    // 倒计时本地走秒，不依赖每秒一条广播
+    setInterval(tickCountdown, 250);
+
     NS.on("json", function (msg) {
       if ("exp_state" in msg) {
         renderExpState(msg);
@@ -529,7 +654,7 @@
         return;
       }
       if ("exp_error" in msg) {
-        const text = msg.exp_error === "slave_offline" ? "从机离线，无法启动实验。" : "实验异常：" + msg.exp_error;
+        const text = msg.exp_error === "slave_offline" ? "从机离线，操作已拒绝。" : "实验异常：" + msg.exp_error;
         showMsg(text, "danger");
         return;
       }
@@ -539,6 +664,9 @@
     NS.on("bin", handleBinary);
     NS.on("close", function () {
       setBadge($("#slave-badge"), "从机离线", "off");
+      state.exp.auto = false;
+      state.exp.mode = "idle";
+      tickCountdown();
     });
   });
 })();

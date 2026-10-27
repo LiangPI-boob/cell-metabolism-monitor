@@ -66,13 +66,17 @@ void slaveLoop();          // 收从机的响应 / 事件
 void serviceExperiment();  // 实验调度状态机
 void expStart();           // 启动实验
 void expStop();            // 停止实验
+void expManual(uint8_t target, bool on); // 手动控制泵/阀（0=泵 1=切换阀 2=排废阀）
 void expBroadcastState();  // 向网页广播实验/链路状态
+void expPumpPctApply();    // 泵运行中应用新的 PWM 占空比
 
 // 实验参数（定义在文件后部的调度模块）
 extern uint32_t exp_param_circulate_ms;
+extern uint32_t exp_param_valve_open_ms;
 extern uint32_t exp_param_stopflow_ms;
 extern uint32_t exp_param_calib_interval_ms;
 extern uint32_t exp_param_calib_ms;
+extern uint32_t exp_param_pump_pct;
 
 // Global mode control (sweep type)
 enum Sweep_Mode_Type
@@ -3720,7 +3724,26 @@ void handle_websocket_text(uint8_t *payload)
       Serial.println("stop_experiment called");
       expStop();
     }
+    // ===== 新增：手动控制泵 / 阀（会退出自动流程）=====
+    if (m_key_string == "manual_pump")
+    {
+      expManual(0, m_JSONdoc_from_payload["manual_pump"] | false);
+    }
+    if (m_key_string == "manual_valve0")
+    {
+      expManual(1, m_JSONdoc_from_payload["manual_valve0"] | false);
+    }
+    if (m_key_string == "manual_valve1")
+    {
+      expManual(2, m_JSONdoc_from_payload["manual_valve1"] | false);
+    }
     // ===== 新增：实验参数（网页可调）=====
+    if (m_key_string == "change_exp_valve_s")
+    {
+      int v = m_JSONdoc_from_payload["change_exp_valve_s"];
+      // 从机阀门单次最长 30 s（VALVE_MAX_ON_MS）
+      if (v >= 1 && v <= 30) exp_param_valve_open_ms = (uint32_t)v * 1000UL;
+    }
     if (m_key_string == "change_exp_circulate_min")
     {
       int v = m_JSONdoc_from_payload["change_exp_circulate_min"];
@@ -3741,6 +3764,17 @@ void handle_websocket_text(uint8_t *payload)
     {
       int v = m_JSONdoc_from_payload["change_exp_calib_min"];
       if (v >= 1 && v <= 180) exp_param_calib_ms = (uint32_t)v * 60000UL;
+    }
+    // 泵 PWM 占空比（25 号口，1–100 %）。泵正在运行时立即以新占空比重启
+    if (m_key_string == "change_exp_pump_pct")
+    {
+      int v = m_JSONdoc_from_payload["change_exp_pump_pct"];
+      if (v >= 1 && v <= 100)
+      {
+        exp_param_pump_pct = (uint32_t)v;
+        expPumpPctApply();
+        expBroadcastState();
+      }
     }
   }
 
@@ -4624,6 +4658,12 @@ uint32_t exp_param_circulate_ms      = 300000UL;    // 循环均质  5 min
 uint32_t exp_param_stopflow_ms       = 300000UL;    // 停流平衡  5 min
 uint32_t exp_param_calib_interval_ms = 21600000UL;  // 校准周期  6 h
 uint32_t exp_param_calib_ms          = 180000UL;    // 单次校准  3 min
+uint32_t exp_param_valve_open_ms     = 10000UL;     // 停流开始后阀门开启 10 s（≤30 s）
+uint32_t exp_param_pump_pct          = 50UL;        // 泵 PWM 占空比（%，25 号口）
+
+bool    g_expManual    = false;  // 手动接管：为 true 时自动流程已退出
+uint8_t g_expStopPhase = 0;      // 停流子阶段：0=阀门开启中 1=阀门已关闭静置
+bool    g_expMeasuring = false;  // 静测采集中（阻塞期间网页显示「进行中」）
 
 const char* expStateName(ExpState s)
 {
@@ -4648,12 +4688,42 @@ void expBroadcastState()
                         : (exp_param_calib_interval_ms - m_elapsed);
   }
 
+  // 当前阶段的「下一动作」与剩余时间（网页据此倒计时）
+  const char* m_next    = "none";
+  uint32_t    m_next_in = 0;
+  uint32_t    m_elapsed = millis() - g_expStateStart;
+  uint32_t    m_total   = 0;
+  switch (g_expState)
+  {
+    case EXP_CIRCULATE:
+      m_next = "pump_stop";  m_total = exp_param_circulate_ms; break;
+    case EXP_STOP_FLOW:
+      if (g_expStopPhase == 0) { m_next = "valve_close"; m_total = exp_param_valve_open_ms; }
+      else                     { m_next = "measure";     m_total = exp_param_stopflow_ms; }
+      break;
+    case EXP_MEASURE:
+      if (g_expMeasuring) { m_next = "measuring"; }
+      else                { m_next = "measure"; m_total = 2000UL; }
+      break;
+    case EXP_CALIBRATE:
+      m_next = "pump_start"; m_total = exp_param_calib_ms; break;
+    default:
+      break;
+  }
+  if (m_total > 0) m_next_in = (m_elapsed < m_total) ? (m_total - m_elapsed) : 0;
+
   String s = "{\"exp_state\":\"";
   s += expStateName(g_expState);
+  s += "\",\"mode\":\"";
+  s += (g_expState != EXP_IDLE) ? "auto" : (g_expManual ? "manual" : "idle");
   s += "\",\"exp_cycle\":";
   s += String(g_expCycleIdx);
   s += ",\"calib_in_ms\":";
   s += String(m_calib_in_ms);
+  s += ",\"next_action\":\"";
+  s += m_next;
+  s += "\",\"next_in_ms\":";
+  s += String(m_next_in);
   s += ",\"pump_on\":";
   s += (g_slavePumpOn ? "true" : "false");
   s += ",\"valve0\":";
@@ -4664,6 +4734,10 @@ void expBroadcastState()
   s += String(exp_param_circulate_ms / 60000UL);
   s += ",\"stopflow_min\":";
   s += String(exp_param_stopflow_ms / 60000UL);
+  s += ",\"valve_open_s\":";
+  s += String(exp_param_valve_open_ms / 1000UL);
+  s += ",\"pump_pct\":";
+  s += String(exp_param_pump_pct);
   s += ",\"calib_interval_h\":";
   s += String(exp_param_calib_interval_ms / 3600000UL);
   s += ",\"calib_min\":";
@@ -4673,8 +4747,11 @@ void expBroadcastState()
   s += "\"";
   s += "}";
   m_websocketserver.broadcastTXT(s.c_str(), s.length());
-  Serial.print("[EXP] ");
-  Serial.println(s);
+  if (g_expState != EXP_IDLE)
+  {
+    Serial.print("[EXP] ");
+    Serial.println(s);
+  }
 }
 
 // 让循环泵开始工作：单次时长 = 循环均质时长 + 60 s 余量，由调度状态机负责停
@@ -4682,7 +4759,43 @@ void expPumpRun()
 {
   uint32_t m_ms = exp_param_circulate_ms + 60000UL;
   slaveSend("{\"id\":" + String(g_expCmdId++) +
-            ",\"cmd\":\"pump\",\"ch\":0,\"speed\":50,\"ms\":" + String(m_ms) + "}");
+            ",\"cmd\":\"pump\",\"ch\":0,\"speed\":" + String(exp_param_pump_pct) +
+            ",\"ms\":" + String(m_ms) + "}");
+  g_slavePumpOn = true;
+}
+
+// 只停泵：从机没有单独的 pump_stop，用 speed=0 + 极短时长等效
+void expPumpStop()
+{
+  slaveSend("{\"id\":" + String(g_expCmdId++) +
+            ",\"cmd\":\"pump\",\"ch\":0,\"speed\":0,\"ms\":1}");
+}
+
+// 泵正在运行时应用新的占空比：从机只能整条 pump 命令重启，因此按当前阶段剩余时长重发
+void expPumpPctApply()
+{
+  if (!g_slavePumpOn || !g_slaveOnline) return;
+
+  uint32_t m_ms = 3600000UL;  // 手动模式：沿用 1 h 上限
+  if (g_expState == EXP_CIRCULATE || g_expState == EXP_CALIBRATE)
+  {
+    uint32_t m_total = (g_expState == EXP_CIRCULATE) ? exp_param_circulate_ms
+                                                     : exp_param_calib_ms;
+    uint32_t m_used  = millis() - g_expStateStart;
+    uint32_t m_left  = (m_used < m_total) ? (m_total - m_used) : 1000UL;
+    m_ms = m_left + 60000UL;
+    if (m_ms > 3600000UL) m_ms = 3600000UL;
+  }
+  slaveSend("{\"id\":" + String(g_expCmdId++) +
+            ",\"cmd\":\"pump\",\"ch\":0,\"speed\":" + String(exp_param_pump_pct) +
+            ",\"ms\":" + String(m_ms) + "}");
+}
+
+// 单路阀门开/关（ch0=切换阀 ch1=排废阀）
+void expValveSet(uint8_t ch, bool open)
+{
+  slaveSend("{\"id\":" + String(g_expCmdId++) + ",\"cmd\":\"valve\",\"ch\":" +
+            String(ch) + ",\"state\":\"" + (open ? "open" : "close") + "\"}");
 }
 
 // 启动实验
@@ -4702,8 +4815,16 @@ void expStart()
   g_expLastStatusMs = millis();
   g_expLastBcastMs  = millis();
   g_expStateStart  = millis();
+  g_expManual      = false;
+  g_expStopPhase   = 0;
+  g_expMeasuring   = false;
   g_expState       = EXP_CIRCULATE;
+  // 先归位（手动遗留的阀门/泵全部关闭），再开泵
+  slaveSend("{\"id\":" + String(g_expCmdId++) + ",\"cmd\":\"stop_all\"}");
   expPumpRun();
+  g_slavePumpOn = true;
+  g_slaveValve0 = false;
+  g_slaveValve1 = false;
   Serial.println("=== 实验启动 ===");
   expBroadcastState();
 }
@@ -4712,9 +4833,65 @@ void expStart()
 void expStop()
 {
   slaveSend("{\"id\":" + String(g_expCmdId++) + ",\"cmd\":\"stop_all\"}");
-  g_expState = EXP_IDLE;
-  Sweep_Mode = dormant;
+  g_expState     = EXP_IDLE;
+  g_expManual    = false;
+  g_expStopPhase = 0;
+  g_expMeasuring = false;
+  Sweep_Mode     = dormant;
+  g_slavePumpOn  = false;
+  g_slaveValve0  = false;
+  g_slaveValve1  = false;
   Serial.println("=== 实验停止 ===");
+  expBroadcastState();
+}
+
+// 手动控制（target: 0=泵 1=切换阀 2=排废阀）
+// 任何手动动作都先退出自动流程并停泵停阀，之后必须重新点「启动实验」才回到自动
+void expManual(uint8_t target, bool on)
+{
+  if (!g_slaveOnline)
+  {
+    m_websocketserver.broadcastTXT("{\"exp_error\":\"slave_offline\"}");
+    Serial.println("[EXP] manual rejected: slave offline");
+    return;
+  }
+
+  if (g_expState != EXP_IDLE)
+  {
+    slaveSend("{\"id\":" + String(g_expCmdId++) + ",\"cmd\":\"stop_all\"}");
+    g_expState = EXP_IDLE;
+    Sweep_Mode = dormant;
+    Serial.println("[EXP] 手动接管，自动流程已退出");
+  }
+
+  g_expManual    = true;
+  g_expStopPhase = 0;
+  g_expMeasuring = false;
+
+  if (target == 0)
+  {
+    if (on)
+    {
+      // 手动开泵：使用网页设定的占空比，单次上限 60 min（与从机 PUMP_MAX_MS 一致）
+      slaveSend("{\"id\":" + String(g_expCmdId++) +
+                ",\"cmd\":\"pump\",\"ch\":0,\"speed\":" + String(exp_param_pump_pct) +
+                ",\"ms\":3600000}");
+      g_slavePumpOn = true;
+    }
+    else
+    {
+      expPumpStop();
+      g_slavePumpOn = false;
+    }
+  }
+  else
+  {
+    // 手动开阀：从机 30 s 自动关闭（VALVE_MAX_ON_MS）
+    expValveSet(target - 1, on);
+    if (target == 1) g_slaveValve0 = on;
+    else             g_slaveValve1 = on;
+  }
+
   expBroadcastState();
 }
 
@@ -4734,22 +4911,24 @@ void expRunMeasure()
 // 调度主函数，每圈 loop 调一次
 void serviceExperiment()
 {
-  if (g_expState == EXP_IDLE) return;
   uint32_t now = millis();
 
-  // 每 5 秒查询一次从机状态（泵/阀实际状态）
-  if (now - g_expLastStatusMs >= 5000UL)
+  // 每 5 秒查询一次从机状态（泵/阀实际状态）—— IDLE 也查，手动模式同样能刷新
+  if (g_slaveOnline && now - g_expLastStatusMs >= 5000UL)
   {
     g_expLastStatusMs = now;
     slaveSend("{\"id\":" + String(g_expCmdId++) + ",\"cmd\":\"status\"}");
   }
 
-  // 每秒刷新一次网页状态（校准倒计时等）
-  if (now - g_expLastBcastMs >= 1000UL)
+  // 自动状态每秒刷新（倒计时），空闲/手动 5 秒刷新一次
+  uint32_t m_bcast_ms = (g_expState == EXP_IDLE) ? 5000UL : 1000UL;
+  if (now - g_expLastBcastMs >= m_bcast_ms)
   {
     g_expLastBcastMs = now;
     expBroadcastState();
   }
+
+  if (g_expState == EXP_IDLE) return;
 
   switch (g_expState)
   {
@@ -4758,14 +4937,30 @@ void serviceExperiment()
       if (now - g_expStateStart >= exp_param_circulate_ms)
       {
         slaveSend("{\"id\":" + String(g_expCmdId++) + ",\"cmd\":\"stop_all\"}");
+        // 停流阶段开始：两路阀门先开 exp_param_valve_open_ms，随后关闭静置
+        expValveSet(0, true);
+        expValveSet(1, true);
+        g_slavePumpOn   = false;
+        g_slaveValve0   = true;
+        g_slaveValve1   = true;
+        g_expStopPhase  = 0;
         g_expState      = EXP_STOP_FLOW;
         g_expStateStart = now;
         expBroadcastState();
       }
       break;
 
-    // ---- ② 停流平衡 ----
+    // ---- ② 停流平衡（子阶段 0：阀门开启；子阶段 1：关阀静置）----
     case EXP_STOP_FLOW:
+      if (g_expStopPhase == 0 && now - g_expStateStart >= exp_param_valve_open_ms)
+      {
+        slaveSend("{\"id\":" + String(g_expCmdId++) + ",\"cmd\":\"stop_all\"}");
+        g_slaveValve0  = false;
+        g_slaveValve1  = false;
+        g_expStopPhase = 1;
+        expBroadcastState();
+        break;
+      }
       if (now - g_expStateStart >= exp_param_stopflow_ms)
       {
         g_expState      = EXP_MEASURE;
@@ -4778,8 +4973,12 @@ void serviceExperiment()
     case EXP_MEASURE:
       if (now - g_expStateStart >= 2000)   // 进入后等 2 秒再测
       {
+        g_expMeasuring = true;
+        expBroadcastState();      // 先让网页显示「静测采集中」
         expRunMeasure();          // 阻塞：跑完一次安培法
+        g_expMeasuring = false;
         g_expCycleIdx++;
+        g_expStopPhase = 0;
 
         if (millis() - g_expLastCalibMs >= exp_param_calib_interval_ms)
         {

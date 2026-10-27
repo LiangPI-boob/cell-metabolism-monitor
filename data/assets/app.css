@@ -314,6 +314,10 @@ body {
   box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.14);
 }
 
+.dot.is-off {
+  background: var(--danger);
+}
+
 /* ---------- 按钮 ---------- */
 .btn {
   display: inline-flex;
@@ -403,6 +407,14 @@ body {
 .field__hint {
   color: var(--muted);
   font-size: 12px;
+}
+
+/* 泵 PWM 占空比滑块 */
+.range {
+  flex: 1;
+  min-width: 120px;
+  max-width: 220px;
+  accent-color: var(--primary);
 }
 
 .choice {
@@ -521,6 +533,16 @@ body {
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   font-size: 13px;
+}
+
+.device.is-offline {
+  border-style: dashed;
+  border-color: var(--danger);
+  color: var(--muted);
+}
+
+#next-in {
+  margin-left: 8px;
 }
 
 /* ---------- Tab ---------- */
